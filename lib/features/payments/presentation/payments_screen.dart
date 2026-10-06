@@ -85,7 +85,9 @@ class _PaymentsScreenState extends ConsumerState<PaymentsScreen>
                 controller: _tabController,
                 children: [
                   KeepAliveWrapper(child: _RecentPaymentsTab()),
-                  KeepAliveWrapper(child: _EnrollmentsTab(onAddPayment: _showAddPaymentDialog)),
+                  KeepAliveWrapper(
+                      child:
+                          _EnrollmentsTab(onAddPayment: _showAddPaymentDialog)),
                   KeepAliveWrapper(child: _OverdueTab()),
                 ],
               ),
@@ -117,7 +119,8 @@ class _PaymentsScreenState extends ConsumerState<PaymentsScreen>
 class _RecentPaymentsTab extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final paymentsAsync = ref.watch(recentPaymentsProvider);
+    final paymentsAsync =
+        ref.watch(recentPaymentsProvider(const PaymentFilterParams()));
     final fmt = NumberFormat('#,###');
 
     return paymentsAsync.when(
@@ -255,7 +258,8 @@ class _EnrollmentsTab extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final enrollmentsAsync = ref.watch(allEnrollmentsProvider);
+    final enrollmentsAsync =
+        ref.watch(allEnrollmentsProvider(const PaymentFilterParams()));
     final fmt = NumberFormat('#,###');
 
     return enrollmentsAsync.when(
@@ -369,7 +373,7 @@ class _EnrollmentsTab extends ConsumerWidget {
 class _OverdueTab extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final overdueAsync = ref.watch(overduePaymentsProvider);
+    final overdueAsync = ref.watch(overduePaymentsProvider(null));
     final fmt = NumberFormat('#,###');
 
     return overdueAsync.when(
@@ -405,7 +409,8 @@ class _OverdueTab extends ConsumerWidget {
               decoration: BoxDecoration(
                 color: AppColors.cardBg,
                 borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: AppColors.error.withValues(alpha: 0.3)),
+                border:
+                    Border.all(color: AppColors.error.withValues(alpha: 0.3)),
               ),
               child: Row(
                 children: [
@@ -470,7 +475,8 @@ class _OverdueTab extends ConsumerWidget {
                             padding: const EdgeInsets.symmetric(
                                 horizontal: 8, vertical: 4),
                             decoration: BoxDecoration(
-                              color: const Color(0xFF25D366).withValues(alpha: 0.15),
+                              color: const Color(0xFF25D366)
+                                  .withValues(alpha: 0.15),
                               borderRadius: BorderRadius.circular(8),
                             ),
                             child: const Row(
@@ -581,7 +587,8 @@ class _AddPaymentDialogState extends ConsumerState<_AddPaymentDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final enrollmentsAsync = ref.watch(allEnrollmentsProvider);
+    final enrollmentsAsync =
+        ref.watch(allEnrollmentsProvider(const PaymentFilterParams()));
 
     return Dialog(
       backgroundColor: AppColors.cardBg,
