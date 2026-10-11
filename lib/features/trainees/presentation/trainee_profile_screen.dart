@@ -153,8 +153,13 @@ class TraineeProfileScreen extends ConsumerWidget {
                     _InfoRow(label: 'المحافظة', value: trainee.province),
                   if (trainee.address.isNotEmpty)
                     _InfoRow(label: 'عنوان السكن', value: trainee.address),
+                  if (trainee.batchDate != null)
+                    _InfoRow(
+                      label: 'تاريخ الدفعة (Batch Date)',
+                      value: DateFormat('yyyy/MM/dd').format(trainee.batchDate!),
+                    ),
                   _InfoRow(
-                    label: 'تاريخ التسجيل / الدفعة',
+                    label: 'تاريخ التسجيل',
                     value: DateFormat('yyyy/MM/dd').format(trainee.createdAt),
                   ),
                   _InfoRow(
@@ -368,6 +373,7 @@ class TraineeProfileScreen extends ConsumerWidget {
     final addressCtrl = TextEditingController(text: trainee.address);
     final behavioralCtrl = TextEditingController(text: trainee.behavioralNotes ?? '');
     final academicCtrl = TextEditingController(text: trainee.academicNotes ?? '');
+    DateTime? selectedBatchDate = trainee.batchDate;
     bool isSaving = false;
 
     showDialog(
@@ -432,6 +438,7 @@ class TraineeProfileScreen extends ConsumerWidget {
                           address: addressCtrl.text.trim().isNotEmpty ? addressCtrl.text.trim() : null,
                           behavioralNotes: behavioralCtrl.text.trim().isNotEmpty ? behavioralCtrl.text.trim() : null,
                           academicNotes: academicCtrl.text.trim().isNotEmpty ? academicCtrl.text.trim() : null,
+                          batchDate: selectedBatchDate,
                         );
                         ref.invalidate(traineeByIdProvider(trainee.id));
                         if (dialogCtx.mounted) Navigator.pop(dialogCtx);

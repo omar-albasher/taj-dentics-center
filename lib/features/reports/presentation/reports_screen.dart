@@ -25,7 +25,7 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 4, vsync: this);
+    _tabController = TabController(length: 7, vsync: this);
   }
 
   @override
@@ -76,6 +76,9 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen>
                 Tab(text: 'الربح والخسارة'),
                 Tab(text: 'المستحقات'),
                 Tab(text: 'إيرادات الكورسات'),
+                Tab(text: 'السيولة وطرق الدفع'),
+                Tab(text: 'أعمار الديون والخصومات'),
+                Tab(text: 'توزيع المصاريف'),
                 Tab(text: 'الحضور'),
               ],
             ),
@@ -87,6 +90,9 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen>
                   KeepAliveWrapper(child: _ProfitLossTab(onExport: _exportCsv)),
                   KeepAliveWrapper(child: _OverdueReportTab(onExport: _exportCsv)),
                   KeepAliveWrapper(child: _CourseRevenueTab(onExport: _exportCsv)),
+                  KeepAliveWrapper(child: _PaymentMethodsAndCashTab(onExport: _exportCsv)),
+                  KeepAliveWrapper(child: _DebtAgingAndDiscountsTab(onExport: _exportCsv)),
+                  KeepAliveWrapper(child: _ExpensesByCategoryTab(onExport: _exportCsv)),
                   KeepAliveWrapper(child: _AttendanceReportTab(onExport: _exportCsv)),
                 ],
               ),
@@ -768,6 +774,552 @@ class _AttendanceReportTab extends ConsumerWidget {
 }
 
 // ─── Helpers ───
+
+// ─── Payment Methods & Cash Tab (Phase 4.5) ───
+class _PaymentMethodsAndCashTab extends ConsumerWidget {
+  final Function(List<List<dynamic>>, String) onExport;
+  const _PaymentMethodsAndCashTab({required this.onExport});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final cashAsync = ref.watch(cashVsAccrualProvider);
+    final methodsAsync = ref.watch(revenueByMethodProvider);
+    final fmt = NumberFormat('#,###');
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Cash vs Accrual KPIs
+        cashAsync.when(
+          loading: () => const SizedBox(height: 80, child: Center(child: CircularProgressIndicator(color: AppColors.gold))),
+          error: (e, _) => Text('خطأ بمؤشرات السيولة: $e', style: const TextStyle(color: AppColors.error, fontFamily: 'Cairo')),
+          data: (kpis) {
+            double collected = 0;
+            double pending = 0;
+            double expected = 0;
+            for (final k in kpis) {
+              collected += (k['collected_cash'] as num?)?.toDouble() ?? 0;
+              pending += (k['pending_accrual'] as num?)?.toDouble() ?? 0;
+              expected += (k['total_expected'] as num?)?.toDouble() ?? 0;
+            }
+            return Row(
+              children: [
+                _ReportCard(
+                  label: 'السيولة المحصّلة فعلياً (Cash)',
+                  value: '${fmt.format(collected.toInt())} ل.س',
+                  color: AppColors.success,
+                  icon: Icons.account_balance_wallet,
+                ),
+                SizedBox(width: Responsive.spacing(context, 12)),
+                _ReportCard(
+                  label: 'المستحقات المتوقعة (Accrual)',
+                  value: '${fmt.format(pending.toInt())} ل.س',
+                  color: AppColors.warning,
+                  icon: Icons.hourglass_top,
+                ),
+                SizedBox(width: Responsive.spacing(context, 12)),
+                _ReportCard(
+                  label: 'إجمالي العقود النشطة',
+                  value: '${fmt.format(expected.toInt())} ل.س',
+                  color: AppColors.gold,
+                  icon: Icons.pie_chart_outline,
+                ),
+              ],
+            );
+          },
+        ),
+        SizedBox(height: Responsive.spacing(context, 16)),
+
+        // Revenue by Payment Method Table
+        Expanded(
+          child: methodsAsync.when(
+            loading: () => const Center(child: CircularProgressIndicator(color: AppColors.gold)),
+            error: (e, _) => AppErrorWidget(message: 'خطأ: $e', onRetry: () => ref.invalidate(revenueByMethodProvider)),
+            data: (rows) {
+              if (rows.isEmpty) {
+                return Center(
+                  child: Text('لا توجد دفعات مسجلة',
+                      style: TextStyle(color: AppColors.textSecondary, fontFamily: 'Cairo', fontSize: Responsive.fontSize(context, 16))),
+                );
+              }
+
+              double totalRevenue = 0;
+              for (final r in rows) {
+                totalRevenue += (r['total_amount'] as num?)?.toDouble() ?? 0;
+              }
+
+              return Column(
+                children: [
+                  Row(
+                    children: [
+                      Text(
+                        'توزيع المقبوضات حسب وسيلة الدفع',
+                        style: TextStyle(
+                          fontSize: Responsive.fontSize(context, 16),
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.gold,
+                          fontFamily: 'Cairo',
+                        ),
+                      ),
+                      const Spacer(),
+                      OutlinedButton.icon(
+                        onPressed: () {
+                          final csv = [
+                            ['طريقة الدفع', 'العملة', 'عدد الدفعات', 'إجمالي المبلغ', 'النسبة'],
+                            ...rows.map((r) {
+                              final amt = (r['total_amount'] as num?)?.toDouble() ?? 0;
+                              final pct = totalRevenue > 0 ? (amt / totalRevenue * 100).toStringAsFixed(1) : '0';
+                              return [
+                                _getMethodLabel(r['method']),
+                                r['currency'] ?? 'SYP',
+                                r['payments_count'] ?? 0,
+                                amt,
+                                '$pct%',
+                              ];
+                            }),
+                          ];
+                          onExport(csv, 'revenue_by_method');
+                        },
+                        icon: const Icon(Icons.download, color: AppColors.gold, size: 18),
+                        label: const Text('تصدير CSV', style: TextStyle(color: AppColors.gold, fontFamily: 'Cairo')),
+                        style: OutlinedButton.styleFrom(side: const BorderSide(color: AppColors.gold), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
+                      ),
+                    ],
+                  ),
+                  SizedBox(height: Responsive.spacing(context, 12)),
+                  Expanded(
+                    child: ListView.separated(
+                      itemCount: rows.length,
+                      separatorBuilder: (_, __) => SizedBox(height: Responsive.spacing(context, 8)),
+                      itemBuilder: (context, index) {
+                        final r = rows[index];
+                        final method = r['method'] as String? ?? 'cash';
+                        final amount = (r['total_amount'] as num?)?.toDouble() ?? 0;
+                        final count = r['payments_count'] ?? 0;
+                        final currency = r['currency'] ?? 'SYP';
+                        final pct = totalRevenue > 0 ? (amount / totalRevenue * 100).toStringAsFixed(1) : '0';
+
+                        return Container(
+                          padding: EdgeInsets.all(Responsive.spacing(context, 16)),
+                          decoration: BoxDecoration(
+                            color: AppColors.cardBg,
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(color: AppColors.divider),
+                          ),
+                          child: Row(
+                            children: [
+                              Container(
+                                width: 44,
+                                height: 44,
+                                decoration: BoxDecoration(
+                                  color: AppColors.gold.withValues(alpha: 0.15),
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: Icon(_getMethodIcon(method), color: AppColors.gold),
+                              ),
+                              SizedBox(width: Responsive.spacing(context, 12)),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      _getMethodLabel(method),
+                                      style: TextStyle(
+                                        fontSize: Responsive.fontSize(context, 15),
+                                        fontWeight: FontWeight.w700,
+                                        color: AppColors.textPrimary,
+                                        fontFamily: 'Cairo',
+                                      ),
+                                    ),
+                                    Text(
+                                      '$count دفعة مسجلة • النسبة: $pct%',
+                                      style: TextStyle(
+                                        fontSize: Responsive.fontSize(context, 12),
+                                        color: AppColors.textSecondary,
+                                        fontFamily: 'Cairo',
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              Text(
+                                '${fmt.format(amount.toInt())} ${currency == 'USD' ? r'$' : 'ل.س'}',
+                                style: TextStyle(
+                                  fontSize: Responsive.fontSize(context, 16),
+                                  fontWeight: FontWeight.w900,
+                                  color: AppColors.success,
+                                  fontFamily: 'Cairo',
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  String _getMethodLabel(String? method) {
+    switch (method) {
+      case 'cash': return 'نقداً (Cash)';
+      case 'sham_cash': return 'شام كاش (Sham Cash)';
+      case 'hawala': return 'حوالة (هرم)';
+      case 'transfer': return 'تحويل بنكي';
+      default: return 'أخرى';
+    }
+  }
+
+  IconData _getMethodIcon(String? method) {
+    switch (method) {
+      case 'cash': return Icons.payments_outlined;
+      case 'sham_cash': return Icons.phone_android;
+      case 'hawala': return Icons.receipt_long;
+      case 'transfer': return Icons.account_balance;
+      default: return Icons.more_horiz;
+    }
+  }
+}
+
+// ─── Debt Aging & Discounts Tab (Phase 4.5) ───
+class _DebtAgingAndDiscountsTab extends ConsumerWidget {
+  final Function(List<List<dynamic>>, String) onExport;
+  const _DebtAgingAndDiscountsTab({required this.onExport});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final agingAsync = ref.watch(debtAgingReportProvider);
+    final discountsAsync = ref.watch(discountsReportProvider);
+    final fmt = NumberFormat('#,###');
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Debt Aging Cards
+        Text(
+          'تصنيف أعمار الديون والمستحقات (Debt Aging)',
+          style: TextStyle(
+            fontSize: Responsive.fontSize(context, 16),
+            fontWeight: FontWeight.w700,
+            color: AppColors.gold,
+            fontFamily: 'Cairo',
+          ),
+        ),
+        SizedBox(height: Responsive.spacing(context, 8)),
+        agingAsync.when(
+          loading: () => const SizedBox(height: 80, child: Center(child: CircularProgressIndicator(color: AppColors.gold))),
+          error: (e, _) => Text('خطأ بأعمار الديون: $e', style: const TextStyle(color: AppColors.error, fontFamily: 'Cairo')),
+          data: (rows) {
+            double less30 = 0;
+            double mid30_90 = 0;
+            double over90 = 0;
+            for (final r in rows) {
+              final b = (r['total_overdue_balance'] as num?)?.toDouble() ?? 0;
+              final bracket = r['aging_bracket'];
+              if (bracket == 'less_than_30') {
+                less30 += b;
+              } else if (bracket == 'between_30_and_90') {
+                mid30_90 += b;
+              } else if (bracket == 'more_than_90') {
+                over90 += b;
+              }
+            }
+            return Row(
+              children: [
+                _ReportCard(
+                  label: 'أقل من شهر (< 30 يوم)',
+                  value: '${fmt.format(less30.toInt())} ل.س',
+                  color: AppColors.textPrimary,
+                  icon: Icons.timer_outlined,
+                ),
+                SizedBox(width: Responsive.spacing(context, 12)),
+                _ReportCard(
+                  label: 'من شهر إلى 3 أشهر (30-90 يوم)',
+                  value: '${fmt.format(mid30_90.toInt())} ل.س',
+                  color: AppColors.warning,
+                  icon: Icons.warning_amber_rounded,
+                ),
+                SizedBox(width: Responsive.spacing(context, 12)),
+                _ReportCard(
+                  label: 'متأخر حرج (> 90 يوم)',
+                  value: '${fmt.format(over90.toInt())} ل.س',
+                  color: AppColors.error,
+                  icon: Icons.error_outline,
+                ),
+              ],
+            );
+          },
+        ),
+        SizedBox(height: Responsive.spacing(context, 20)),
+
+        // Discounts Report
+        Row(
+          children: [
+            Text(
+              'تقرير الخصومات الممنوحة حسب الكورس',
+              style: TextStyle(
+                fontSize: Responsive.fontSize(context, 16),
+                fontWeight: FontWeight.w700,
+                color: AppColors.gold,
+                fontFamily: 'Cairo',
+              ),
+            ),
+            const Spacer(),
+            OutlinedButton.icon(
+              onPressed: () {
+                final discounts = discountsAsync.asData?.value ?? [];
+                final csv = [
+                  ['الكورس', 'العملة', 'عدد المتدربين الممنوحين', 'إجمالي الخصم'],
+                  ...discounts.map((d) => [
+                    d['course_name'],
+                    d['currency'],
+                    d['discounted_trainees_count'],
+                    d['total_discounts'],
+                  ]),
+                ];
+                onExport(csv, 'discounts_report');
+              },
+              icon: const Icon(Icons.download, color: AppColors.gold, size: 18),
+              label: const Text('تصدير CSV', style: TextStyle(color: AppColors.gold, fontFamily: 'Cairo')),
+              style: OutlinedButton.styleFrom(side: const BorderSide(color: AppColors.gold), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
+            ),
+          ],
+        ),
+        SizedBox(height: Responsive.spacing(context, 12)),
+        Expanded(
+          child: discountsAsync.when(
+            loading: () => const Center(child: CircularProgressIndicator(color: AppColors.gold)),
+            error: (e, _) => AppErrorWidget(message: 'خطأ: $e', onRetry: () => ref.invalidate(discountsReportProvider)),
+            data: (discounts) {
+              if (discounts.isEmpty) {
+                return Center(
+                  child: Text('لا توجد خصومات ممنوحة',
+                      style: TextStyle(color: AppColors.textSecondary, fontFamily: 'Cairo', fontSize: Responsive.fontSize(context, 16))),
+                );
+              }
+              return ListView.separated(
+                itemCount: discounts.length,
+                separatorBuilder: (_, __) => SizedBox(height: Responsive.spacing(context, 8)),
+                itemBuilder: (context, index) {
+                  final d = discounts[index];
+                  final course = d['course_name'] ?? '';
+                  final count = d['discounted_trainees_count'] ?? 0;
+                  final total = (d['total_discounts'] as num?)?.toDouble() ?? 0;
+                  final currency = d['currency'] ?? 'SYP';
+
+                  return Container(
+                    padding: EdgeInsets.all(Responsive.spacing(context, 16)),
+                    decoration: BoxDecoration(
+                      color: AppColors.cardBg,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: AppColors.divider),
+                    ),
+                    child: Row(
+                      children: [
+                        Container(
+                          width: 44,
+                          height: 44,
+                          decoration: BoxDecoration(
+                            color: AppColors.warning.withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: const Icon(Icons.discount_outlined, color: AppColors.warning),
+                        ),
+                        SizedBox(width: Responsive.spacing(context, 12)),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                course,
+                                style: TextStyle(
+                                  fontSize: Responsive.fontSize(context, 15),
+                                  fontWeight: FontWeight.w700,
+                                  color: AppColors.textPrimary,
+                                  fontFamily: 'Cairo',
+                                ),
+                              ),
+                              Text(
+                                '$count متدرب حاصل على خصم',
+                                style: TextStyle(
+                                  fontSize: Responsive.fontSize(context, 12),
+                                  color: AppColors.textSecondary,
+                                  fontFamily: 'Cairo',
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        Text(
+                          '${fmt.format(total.toInt())} ${currency == 'USD' ? r'$' : 'ل.س'}',
+                          style: TextStyle(
+                            fontSize: Responsive.fontSize(context, 16),
+                            fontWeight: FontWeight.w900,
+                            color: AppColors.warning,
+                            fontFamily: 'Cairo',
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// ─── Expenses by Category Tab (Phase 4.5) ───
+class _ExpensesByCategoryTab extends ConsumerWidget {
+  final Function(List<List<dynamic>>, String) onExport;
+  const _ExpensesByCategoryTab({required this.onExport});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final reportAsync = ref.watch(expensesByCategoryProvider);
+    final fmt = NumberFormat('#,###');
+
+    return reportAsync.when(
+      loading: () => const Center(child: CircularProgressIndicator(color: AppColors.gold)),
+      error: (e, _) => AppErrorWidget(message: 'خطأ: $e', onRetry: () => ref.invalidate(expensesByCategoryProvider)),
+      data: (rows) {
+        if (rows.isEmpty) {
+          return Center(
+            child: Text('لا توجد مصاريف مسجلة',
+                style: TextStyle(color: AppColors.textSecondary, fontFamily: 'Cairo', fontSize: Responsive.fontSize(context, 16))),
+          );
+        }
+
+        double totalExpenses = 0;
+        for (final r in rows) {
+          totalExpenses += (r['total_spent'] as num?)?.toDouble() ?? 0;
+        }
+
+        return Column(
+          children: [
+            Row(
+              children: [
+                Text(
+                  'توزيع المصاريف حسب الفئة',
+                  style: TextStyle(
+                    fontSize: Responsive.fontSize(context, 16),
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.gold,
+                    fontFamily: 'Cairo',
+                  ),
+                ),
+                const Spacer(),
+                OutlinedButton.icon(
+                  onPressed: () {
+                    final csv = [
+                      ['الفئة', 'العملة', 'عدد العمليات', 'إجمالي المصروف', 'النسبة'],
+                      ...rows.map((r) {
+                        final amt = (r['total_spent'] as num?)?.toDouble() ?? 0;
+                        final pct = totalExpenses > 0 ? (amt / totalExpenses * 100).toStringAsFixed(1) : '0';
+                        return [
+                          r['category'],
+                          r['currency'],
+                          r['expense_count'],
+                          amt,
+                          '$pct%',
+                        ];
+                      }),
+                    ];
+                    onExport(csv, 'expenses_by_category');
+                  },
+                  icon: const Icon(Icons.download, color: AppColors.gold, size: 18),
+                  label: const Text('تصدير CSV', style: TextStyle(color: AppColors.gold, fontFamily: 'Cairo')),
+                  style: OutlinedButton.styleFrom(side: const BorderSide(color: AppColors.gold), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
+                ),
+              ],
+            ),
+            SizedBox(height: Responsive.spacing(context, 12)),
+            Expanded(
+              child: ListView.separated(
+                itemCount: rows.length,
+                separatorBuilder: (_, __) => SizedBox(height: Responsive.spacing(context, 8)),
+                itemBuilder: (context, index) {
+                  final r = rows[index];
+                  final cat = r['category'] as String? ?? 'عام';
+                  final count = r['expense_count'] ?? 0;
+                  final total = (r['total_spent'] as num?)?.toDouble() ?? 0;
+                  final currency = r['currency'] ?? 'SYP';
+                  final pct = totalExpenses > 0 ? (total / totalExpenses * 100).toStringAsFixed(1) : '0';
+
+                  return Container(
+                    padding: EdgeInsets.all(Responsive.spacing(context, 16)),
+                    decoration: BoxDecoration(
+                      color: AppColors.cardBg,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: AppColors.divider),
+                    ),
+                    child: Row(
+                      children: [
+                        Container(
+                          width: 44,
+                          height: 44,
+                          decoration: BoxDecoration(
+                            color: AppColors.error.withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: const Icon(Icons.receipt_outlined, color: AppColors.error),
+                        ),
+                        SizedBox(width: Responsive.spacing(context, 12)),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                cat,
+                                style: TextStyle(
+                                  fontSize: Responsive.fontSize(context, 15),
+                                  fontWeight: FontWeight.w700,
+                                  color: AppColors.textPrimary,
+                                  fontFamily: 'Cairo',
+                                ),
+                              ),
+                              Text(
+                                '$count سند صرف • النسبة: $pct%',
+                                style: TextStyle(
+                                  fontSize: Responsive.fontSize(context, 12),
+                                  color: AppColors.textSecondary,
+                                  fontFamily: 'Cairo',
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        Text(
+                          '${fmt.format(total.toInt())} ${currency == 'USD' ? r'$' : 'ل.س'}',
+                          style: TextStyle(
+                            fontSize: Responsive.fontSize(context, 16),
+                            fontWeight: FontWeight.w900,
+                            color: AppColors.error,
+                            fontFamily: 'Cairo',
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+}
+
 class _ReportCard extends StatelessWidget {
   final String label;
   final String value;

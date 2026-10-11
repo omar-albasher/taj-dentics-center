@@ -1,3 +1,4 @@
+import 'package:intl/intl.dart' hide TextDirection;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/constants/app_colors.dart';
@@ -25,6 +26,7 @@ class _AddTraineeDialogState extends ConsumerState<AddTraineeDialog> {
   final _behavioralNotesCtrl = TextEditingController();
   final _academicNotesCtrl = TextEditingController();
   final _passwordCtrl = TextEditingController();
+  DateTime? _batchDate;
   bool _loading = false;
   bool _obscure = true;
 
@@ -76,6 +78,7 @@ class _AddTraineeDialogState extends ConsumerState<AddTraineeDialog> {
         address: _addressCtrl.text.trim().isNotEmpty ? _addressCtrl.text.trim() : null,
         behavioralNotes: _behavioralNotesCtrl.text.trim().isNotEmpty ? _behavioralNotesCtrl.text.trim() : null,
         academicNotes: _academicNotesCtrl.text.trim().isNotEmpty ? _academicNotesCtrl.text.trim() : null,
+        batchDate: _batchDate,
         password: _passwordCtrl.text,
       );
 
@@ -252,6 +255,70 @@ class _AddTraineeDialogState extends ConsumerState<AddTraineeDialog> {
                     ),
                     const SizedBox(height: 12),
 
+                                        // Batch Date & Notes
+                    Row(
+                      children: [
+                        Expanded(
+                          child: InkWell(
+                            onTap: () async {
+                              final picked = await showDatePicker(
+                                context: context,
+                                initialDate: _batchDate ?? DateTime.now(),
+                                firstDate: DateTime(2020),
+                                lastDate: DateTime.now().add(const Duration(days: 365)),
+                                builder: (context, child) => Theme(
+                                  data: Theme.of(context).copyWith(
+                                    colorScheme: const ColorScheme.dark(
+                                      primary: AppColors.gold,
+                                      onPrimary: Colors.black,
+                                      surface: AppColors.cardBg,
+                                      onSurface: AppColors.textPrimary,
+                                    ),
+                                  ),
+                                  child: child!,
+                                ),
+                              );
+                              if (picked != null) {
+                                setState(() => _batchDate = picked);
+                              }
+                            },
+                            borderRadius: BorderRadius.circular(10),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 15),
+                              decoration: BoxDecoration(
+                                color: AppColors.surface,
+                                borderRadius: BorderRadius.circular(10),
+                                border: Border.all(color: AppColors.divider),
+                              ),
+                              child: Row(
+                                children: [
+                                  const Icon(Icons.event_outlined, color: AppColors.gold, size: 20),
+                                  const SizedBox(width: 10),
+                                  Expanded(
+                                    child: Text(
+                                      _batchDate != null
+                                          ? 'تاريخ الدفعة: ${DateFormat("yyyy/MM/dd").format(_batchDate!)}'
+                                          : 'تحديد تاريخ الدفعة (اختياري)',
+                                      style: TextStyle(
+                                        color: _batchDate != null ? AppColors.textPrimary : AppColors.textSecondary,
+                                        fontFamily: 'Cairo',
+                                        fontSize: 13,
+                                      ),
+                                    ),
+                                  ),
+                                  if (_batchDate != null)
+                                    IconButton(
+                                      icon: const Icon(Icons.clear, size: 16, color: AppColors.textSecondary),
+                                      onPressed: () => setState(() => _batchDate = null),
+                                    ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
                     // Behavioral & Academic Notes
                     Row(
                       children: [
