@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:admin_dashboard/core/widgets/app_error_widget.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/utils/responsive.dart';
 import '../data/admin_sessions_repository.dart';
@@ -614,7 +613,7 @@ class _CreateSessionDialogState extends ConsumerState<_CreateSessionDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final coursesAsync = ref.watch(coursesProvider);
+    final cohortsAsync = ref.watch(allActiveCohortsProvider);
 
     return Dialog(
       backgroundColor: AppColors.cardBg,
@@ -648,36 +647,30 @@ class _CreateSessionDialogState extends ConsumerState<_CreateSessionDialog> {
               const Divider(color: AppColors.divider),
               SizedBox(height: Responsive.spacing(context, 16)),
 
-              // Cohort selector — نجيب المجموعات من الكورسات
-              coursesAsync.when(
+              // Cohort selector
+              cohortsAsync.when(
                 loading: () =>
-                    const CircularProgressIndicator(color: AppColors.gold),
-                error: (e, _) => Text('خطأ: $e'),
-                data: (courses) {
-                  return FutureBuilder<List<Map<String, dynamic>>>(
-                    future: _getAllCohorts(ref),
-                    builder: (context, snapshot) {
-                      final cohorts = snapshot.data ?? [];
-                      return DropdownButtonFormField<String>(
-                        value: _selectedCohortId,
-                        dropdownColor: AppColors.cardBg,
-                        decoration: _inputDecoration(
-                            'اختر المجموعة *', Icons.group_outlined),
-                        items: cohorts.map((c) {
-                          return DropdownMenuItem(
-                            value: c['id'] as String,
-                            child: Text(
-                              '${c['name']} — ${c['course_name']}',
-                              style: const TextStyle(
-                                  color: AppColors.textPrimary,
-                                  fontFamily: 'Cairo',
-                                  fontSize: 13),
-                            ),
-                          );
-                        }).toList(),
-                        onChanged: (v) => setState(() => _selectedCohortId = v),
+                    const Center(child: CircularProgressIndicator(color: AppColors.gold)),
+                error: (e, _) => Text('خطأ: $e', style: const TextStyle(color: AppColors.error)),
+                data: (cohorts) {
+                  return DropdownButtonFormField<String>(
+                    value: _selectedCohortId,
+                    dropdownColor: AppColors.cardBg,
+                    decoration: _inputDecoration(
+                        'اختر المجموعة *', Icons.group_outlined),
+                    items: cohorts.map((c) {
+                      return DropdownMenuItem(
+                        value: c['id'] as String,
+                        child: Text(
+                          '${c['name']} — ${c['course_name']}',
+                          style: const TextStyle(
+                              color: AppColors.textPrimary,
+                              fontFamily: 'Cairo',
+                              fontSize: 13),
+                        ),
                       );
-                    },
+                    }).toList(),
+                    onChanged: (v) => setState(() => _selectedCohortId = v),
                   );
                 },
               ),
@@ -782,21 +775,7 @@ class _CreateSessionDialogState extends ConsumerState<_CreateSessionDialog> {
     );
   }
 
-  Future<List<Map<String, dynamic>>> _getAllCohorts(WidgetRef ref) async {
-    final response = await Supabase.instance.client
-        .from('cohorts')
-        .select('id, name, courses!cohorts_course_id_fkey(name)')
-        .eq('is_active', true);
 
-    return (response as List).map((c) {
-      final course = c['courses'] as Map<String, dynamic>? ?? {};
-      return {
-        'id': c['id'],
-        'name': c['name'],
-        'course_name': course['name'] ?? '',
-      };
-    }).toList();
-  }
 
   InputDecoration _inputDecoration(String label, IconData icon) {
     return InputDecoration(

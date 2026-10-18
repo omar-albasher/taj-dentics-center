@@ -103,7 +103,7 @@ class TraineeProfileScreen extends ConsumerWidget {
           IconButton(
             tooltip: 'تعديل البيانات',
             icon: const Icon(Icons.edit_outlined, color: AppColors.gold),
-            onPressed: () => _showEditDialog(context, ref, trainee),
+            onPressed: () => _showEditDialog(context, trainee),
           ),
           ElevatedButton.icon(
             onPressed: () {
@@ -362,102 +362,66 @@ class TraineeProfileScreen extends ConsumerWidget {
     );
   }
 
-  void _showEditDialog(BuildContext context, WidgetRef ref, TraineeModel trainee) {
-    final codeCtrl = TextEditingController(text: trainee.traineeCode ?? '');
-    final nameArCtrl = TextEditingController(text: trainee.fullNameAr ?? trainee.fullName);
-    final nameEnCtrl = TextEditingController(text: trainee.fullNameEn ?? '');
-    final whatsappCtrl = TextEditingController(text: trainee.whatsapp);
-    final universityCtrl = TextEditingController(text: trainee.university ?? '');
-    final academicYearCtrl = TextEditingController(text: trainee.academicYear ?? '');
-    final provinceCtrl = TextEditingController(text: trainee.province);
-    final addressCtrl = TextEditingController(text: trainee.address);
-    final behavioralCtrl = TextEditingController(text: trainee.behavioralNotes ?? '');
-    final academicCtrl = TextEditingController(text: trainee.academicNotes ?? '');
-    DateTime? selectedBatchDate = trainee.batchDate;
-    bool isSaving = false;
-
+  void _showEditDialog(BuildContext context, TraineeModel trainee) {
     showDialog(
       context: context,
-      builder: (dialogCtx) => StatefulBuilder(
-        builder: (ctx, setDialogState) => AlertDialog(
-          backgroundColor: AppColors.cardBg,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          title: const Row(
-            children: [
-              Icon(Icons.edit, color: AppColors.gold, size: 22),
-              SizedBox(width: 8),
-              Text('تعديل بيانات المتدرب',
-                  style: TextStyle(
-                      color: AppColors.gold,
-                      fontFamily: 'Cairo',
-                      fontWeight: FontWeight.bold,
-                      fontSize: 16)),
-            ],
-          ),
-          content: SizedBox(
-            width: 500,
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  _dialogField(controller: codeCtrl, label: 'كود المتدرب الفريد (T10001)', isLtr: true),
-                  _dialogField(controller: nameArCtrl, label: 'الاسم بالعربي (جواز السفر)'),
-                  _dialogField(controller: nameEnCtrl, label: 'الاسم بالإنكليزي (جواز السفر)', isLtr: true),
-                  _dialogField(controller: whatsappCtrl, label: 'رقم الواتساب', isLtr: true),
-                  _dialogField(controller: universityCtrl, label: 'اسم الجامعة أو المعهد'),
-                  _dialogField(controller: academicYearCtrl, label: 'السنة الدراسية'),
-                  _dialogField(controller: provinceCtrl, label: 'المحافظة'),
-                  _dialogField(controller: addressCtrl, label: 'عنوان السكن'),
-                  _dialogField(controller: behavioralCtrl, label: 'ملاحظات سلوكية عن المتدرب', maxLines: 2),
-                  _dialogField(controller: academicCtrl, label: 'ملاحظات أكاديمية عن المتدرب', maxLines: 2),
-                ],
-              ),
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(dialogCtx),
-              child: const Text('إلغاء', style: TextStyle(color: AppColors.textSecondary, fontFamily: 'Cairo')),
-            ),
-            ElevatedButton(
-              onPressed: isSaving
-                  ? null
-                  : () async {
-                      setDialogState(() => isSaving = true);
-                      try {
-                        final repo = ref.read(traineesRepositoryProvider);
-                        await repo.updateTraineeDetails(
-                          traineeId: trainee.id,
-                          traineeCode: codeCtrl.text.trim().isNotEmpty ? codeCtrl.text.trim() : null,
-                          fullNameAr: nameArCtrl.text.trim().isNotEmpty ? nameArCtrl.text.trim() : null,
-                          fullNameEn: nameEnCtrl.text.trim().isNotEmpty ? nameEnCtrl.text.trim() : null,
-                          whatsapp: whatsappCtrl.text.trim().isNotEmpty ? whatsappCtrl.text.trim() : null,
-                          university: universityCtrl.text.trim().isNotEmpty ? universityCtrl.text.trim() : null,
-                          academicYear: academicYearCtrl.text.trim().isNotEmpty ? academicYearCtrl.text.trim() : null,
-                          province: provinceCtrl.text.trim().isNotEmpty ? provinceCtrl.text.trim() : null,
-                          address: addressCtrl.text.trim().isNotEmpty ? addressCtrl.text.trim() : null,
-                          behavioralNotes: behavioralCtrl.text.trim().isNotEmpty ? behavioralCtrl.text.trim() : null,
-                          academicNotes: academicCtrl.text.trim().isNotEmpty ? academicCtrl.text.trim() : null,
-                          batchDate: selectedBatchDate,
-                        );
-                        ref.invalidate(traineeByIdProvider(trainee.id));
-                        if (dialogCtx.mounted) Navigator.pop(dialogCtx);
-                      } catch (e) {
-                        setDialogState(() => isSaving = false);
-                      }
-                    },
-              child: isSaving
-                  ? const SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black),
-                    )
-                  : const Text('حفظ', style: TextStyle(fontFamily: 'Cairo')),
-            ),
-          ],
-        ),
-      ),
+      builder: (dialogCtx) => _EditTraineeDialog(trainee: trainee),
     );
+  }
+}
+
+class _EditTraineeDialog extends ConsumerStatefulWidget {
+  final TraineeModel trainee;
+  const _EditTraineeDialog({required this.trainee});
+
+  @override
+  ConsumerState<_EditTraineeDialog> createState() => _EditTraineeDialogState();
+}
+
+class _EditTraineeDialogState extends ConsumerState<_EditTraineeDialog> {
+  late final TextEditingController _codeCtrl;
+  late final TextEditingController _nameArCtrl;
+  late final TextEditingController _nameEnCtrl;
+  late final TextEditingController _whatsappCtrl;
+  late final TextEditingController _universityCtrl;
+  late final TextEditingController _academicYearCtrl;
+  late final TextEditingController _provinceCtrl;
+  late final TextEditingController _addressCtrl;
+  late final TextEditingController _behavioralCtrl;
+  late final TextEditingController _academicCtrl;
+  late DateTime? _selectedBatchDate;
+  bool _isSaving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    final trainee = widget.trainee;
+    _codeCtrl = TextEditingController(text: trainee.traineeCode ?? '');
+    _nameArCtrl = TextEditingController(text: trainee.fullNameAr ?? trainee.fullName);
+    _nameEnCtrl = TextEditingController(text: trainee.fullNameEn ?? '');
+    _whatsappCtrl = TextEditingController(text: trainee.whatsapp);
+    _universityCtrl = TextEditingController(text: trainee.university ?? '');
+    _academicYearCtrl = TextEditingController(text: trainee.academicYear ?? '');
+    _provinceCtrl = TextEditingController(text: trainee.province);
+    _addressCtrl = TextEditingController(text: trainee.address);
+    _behavioralCtrl = TextEditingController(text: trainee.behavioralNotes ?? '');
+    _academicCtrl = TextEditingController(text: trainee.academicNotes ?? '');
+    _selectedBatchDate = trainee.batchDate;
+  }
+
+  @override
+  void dispose() {
+    _codeCtrl.dispose();
+    _nameArCtrl.dispose();
+    _nameEnCtrl.dispose();
+    _whatsappCtrl.dispose();
+    _universityCtrl.dispose();
+    _academicYearCtrl.dispose();
+    _provinceCtrl.dispose();
+    _addressCtrl.dispose();
+    _behavioralCtrl.dispose();
+    _academicCtrl.dispose();
+    super.dispose();
   }
 
   Widget _dialogField({
@@ -483,6 +447,90 @@ class TraineeProfileScreen extends ConsumerWidget {
           focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: AppColors.gold, width: 1.5)),
         ),
       ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final trainee = widget.trainee;
+
+    return AlertDialog(
+      backgroundColor: AppColors.cardBg,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      title: const Row(
+        children: [
+          Icon(Icons.edit, color: AppColors.gold, size: 22),
+          SizedBox(width: 8),
+          Text('تعديل بيانات المتدرب',
+              style: TextStyle(
+                  color: AppColors.gold,
+                  fontFamily: 'Cairo',
+                  fontWeight: FontWeight.bold,
+                  fontSize: 16)),
+        ],
+      ),
+      content: SizedBox(
+        width: 500,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _dialogField(controller: _codeCtrl, label: 'كود المتدرب الفريد (T10001)', isLtr: true),
+              _dialogField(controller: _nameArCtrl, label: 'الاسم بالعربي (جواز السفر)'),
+              _dialogField(controller: _nameEnCtrl, label: 'الاسم بالإنكليزي (جواز السفر)', isLtr: true),
+              _dialogField(controller: _whatsappCtrl, label: 'رقم الواتساب', isLtr: true),
+              _dialogField(controller: _universityCtrl, label: 'اسم الجامعة أو المعهد'),
+              _dialogField(controller: _academicYearCtrl, label: 'السنة الدراسية'),
+              _dialogField(controller: _provinceCtrl, label: 'المحافظة'),
+              _dialogField(controller: _addressCtrl, label: 'عنوان السكن'),
+              _dialogField(controller: _behavioralCtrl, label: 'ملاحظات سلوكية عن المتدرب', maxLines: 2),
+              _dialogField(controller: _academicCtrl, label: 'ملاحظات أكاديمية عن المتدرب', maxLines: 2),
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('إلغاء', style: TextStyle(color: AppColors.textSecondary, fontFamily: 'Cairo')),
+        ),
+        ElevatedButton(
+          onPressed: _isSaving
+              ? null
+              : () async {
+                  setState(() => _isSaving = true);
+                  try {
+                    final repo = ref.read(traineesRepositoryProvider);
+                    await repo.updateTraineeDetails(
+                      traineeId: trainee.id,
+                      traineeCode: _codeCtrl.text.trim().isNotEmpty ? _codeCtrl.text.trim() : null,
+                      fullNameAr: _nameArCtrl.text.trim().isNotEmpty ? _nameArCtrl.text.trim() : null,
+                      fullNameEn: _nameEnCtrl.text.trim().isNotEmpty ? _nameEnCtrl.text.trim() : null,
+                      whatsapp: _whatsappCtrl.text.trim().isNotEmpty ? _whatsappCtrl.text.trim() : null,
+                      university: _universityCtrl.text.trim().isNotEmpty ? _universityCtrl.text.trim() : null,
+                      academicYear: _academicYearCtrl.text.trim().isNotEmpty ? _academicYearCtrl.text.trim() : null,
+                      province: _provinceCtrl.text.trim().isNotEmpty ? _provinceCtrl.text.trim() : null,
+                      address: _addressCtrl.text.trim().isNotEmpty ? _addressCtrl.text.trim() : null,
+                      behavioralNotes: _behavioralCtrl.text.trim().isNotEmpty ? _behavioralCtrl.text.trim() : null,
+                      academicNotes: _academicCtrl.text.trim().isNotEmpty ? _academicCtrl.text.trim() : null,
+                      batchDate: _selectedBatchDate,
+                    );
+                    ref.invalidate(traineeByIdProvider(trainee.id));
+                    if (!context.mounted) return;
+                    Navigator.pop(context);
+                  } catch (e) {
+                    if (mounted) setState(() => _isSaving = false);
+                  }
+                },
+          child: _isSaving
+              ? const SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black),
+                )
+              : const Text('حفظ', style: TextStyle(fontFamily: 'Cairo')),
+        ),
+      ],
     );
   }
 }

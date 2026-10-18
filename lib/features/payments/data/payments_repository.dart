@@ -146,7 +146,7 @@ class PaymentFilterParams {
 }
 
 final allEnrollmentsProvider =
-    FutureProvider.family<List<Map<String, dynamic>>, PaymentFilterParams>((ref, params) {
+    FutureProvider.autoDispose.family<List<Map<String, dynamic>>, PaymentFilterParams>((ref, params) {
   return ref.watch(paymentsRepositoryProvider).getAllEnrollments(
         search: params.search,
         status: params.status,
@@ -154,7 +154,7 @@ final allEnrollmentsProvider =
 });
 
 final recentPaymentsProvider =
-    FutureProvider.family<List<Map<String, dynamic>>, PaymentFilterParams>((ref, params) {
+    FutureProvider.autoDispose.family<List<Map<String, dynamic>>, PaymentFilterParams>((ref, params) {
   return ref.watch(paymentsRepositoryProvider).getRecentPayments(
         search: params.search,
         method: params.method,
@@ -162,6 +162,6 @@ final recentPaymentsProvider =
 });
 
 final overduePaymentsProvider =
-    FutureProvider.family<List<Map<String, dynamic>>, String?>((ref, search) {
+    FutureProvider.autoDispose.family<List<Map<String, dynamic>>, String?>((ref, search) {
   return ref.watch(paymentsRepositoryProvider).getOverduePayments(search: search);
 });

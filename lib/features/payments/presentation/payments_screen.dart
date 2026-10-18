@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
@@ -125,9 +126,18 @@ class _RecentPaymentsTabState extends ConsumerState<_RecentPaymentsTab> {
   final _searchCtrl = TextEditingController();
   String _methodFilter = 'all';
   String _searchQuery = '';
+  Timer? _debounce;
+
+  void _onSearchChanged(String v) {
+    _debounce?.cancel();
+    _debounce = Timer(const Duration(milliseconds: 350), () {
+      if (mounted) setState(() => _searchQuery = v.trim());
+    });
+  }
 
   @override
   void dispose() {
+    _debounce?.cancel();
     _searchCtrl.dispose();
     super.dispose();
   }
@@ -158,6 +168,7 @@ class _RecentPaymentsTabState extends ConsumerState<_RecentPaymentsTab> {
                       ? IconButton(
                           icon: const Icon(Icons.clear, color: AppColors.textSecondary, size: 18),
                           onPressed: () {
+                            _debounce?.cancel();
                             _searchCtrl.clear();
                             setState(() => _searchQuery = '');
                           },
@@ -170,7 +181,7 @@ class _RecentPaymentsTabState extends ConsumerState<_RecentPaymentsTab> {
                   enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: AppColors.divider)),
                   focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: AppColors.gold, width: 2)),
                 ),
-                onChanged: (v) => setState(() => _searchQuery = v.trim()),
+                onChanged: _onSearchChanged,
               ),
             ),
             const SizedBox(width: 12),
@@ -356,9 +367,18 @@ class _EnrollmentsTabState extends ConsumerState<_EnrollmentsTab> {
   final _searchCtrl = TextEditingController();
   String _statusFilter = 'all';
   String _searchQuery = '';
+  Timer? _debounce;
+
+  void _onSearchChanged(String v) {
+    _debounce?.cancel();
+    _debounce = Timer(const Duration(milliseconds: 350), () {
+      if (mounted) setState(() => _searchQuery = v.trim());
+    });
+  }
 
   @override
   void dispose() {
+    _debounce?.cancel();
     _searchCtrl.dispose();
     super.dispose();
   }
@@ -389,6 +409,7 @@ class _EnrollmentsTabState extends ConsumerState<_EnrollmentsTab> {
                       ? IconButton(
                           icon: const Icon(Icons.clear, color: AppColors.textSecondary, size: 18),
                           onPressed: () {
+                            _debounce?.cancel();
                             _searchCtrl.clear();
                             setState(() => _searchQuery = '');
                           },
@@ -401,7 +422,7 @@ class _EnrollmentsTabState extends ConsumerState<_EnrollmentsTab> {
                   enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: AppColors.divider)),
                   focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: AppColors.gold, width: 2)),
                 ),
-                onChanged: (v) => setState(() => _searchQuery = v.trim()),
+                onChanged: _onSearchChanged,
               ),
             ),
             const SizedBox(width: 12),
@@ -552,9 +573,18 @@ class _OverdueTab extends ConsumerStatefulWidget {
 class _OverdueTabState extends ConsumerState<_OverdueTab> {
   final _searchCtrl = TextEditingController();
   String _searchQuery = '';
+  Timer? _debounce;
+
+  void _onSearchChanged(String v) {
+    _debounce?.cancel();
+    _debounce = Timer(const Duration(milliseconds: 350), () {
+      if (mounted) setState(() => _searchQuery = v.trim());
+    });
+  }
 
   @override
   void dispose() {
+    _debounce?.cancel();
     _searchCtrl.dispose();
     super.dispose();
   }
@@ -578,6 +608,7 @@ class _OverdueTabState extends ConsumerState<_OverdueTab> {
                 ? IconButton(
                     icon: const Icon(Icons.clear, color: AppColors.textSecondary, size: 18),
                     onPressed: () {
+                      _debounce?.cancel();
                       _searchCtrl.clear();
                       setState(() => _searchQuery = '');
                     },
@@ -590,7 +621,7 @@ class _OverdueTabState extends ConsumerState<_OverdueTab> {
             enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: AppColors.divider)),
             focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: AppColors.gold, width: 2)),
           ),
-          onChanged: (v) => setState(() => _searchQuery = v.trim()),
+          onChanged: _onSearchChanged,
         ),
         SizedBox(height: Responsive.spacing(context, 12)),
         // ── List ──
