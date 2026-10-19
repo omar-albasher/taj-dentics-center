@@ -99,6 +99,16 @@ class CoursesRepository {
     return List<Map<String, dynamic>>.from(response);
   }
 
+  Future<CourseModel?> getCourseById(String id) async {
+    final response = await _client
+        .from('courses')
+        .select()
+        .eq('id', id)
+        .maybeSingle();
+    if (response == null) return null;
+    return CourseModel.fromMap(response);
+  }
+
   Future<void> updateCourse({
     required String id,
     required String name,
@@ -131,4 +141,10 @@ final allActiveCohortsProvider =
 final cohortsByCourseProvider =
     FutureProvider.family<List<CohortModel>, String>((ref, courseId) {
   return ref.watch(coursesRepositoryProvider).getCohortsByCourse(courseId);
+});
+
+
+final courseByIdProvider =
+    FutureProvider.family<CourseModel?, String>((ref, id) {
+  return ref.watch(coursesRepositoryProvider).getCourseById(id);
 });

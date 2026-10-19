@@ -1,4 +1,5 @@
-import 'package:admin_dashboard/features/courses/presentation/course_detail_screen.dart';
+import 'package:go_router/go_router.dart';
+import '../../../core/router/app_router.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/utils/app_formatters.dart';
@@ -96,12 +97,7 @@ class CoursesScreen extends ConsumerWidget {
                         course: c,
                         onEdit: () =>
                             _showCourseDialog(context, ref, course: c),
-                        onTap: () => Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => CourseDetailScreen(course: c),
-                          ),
-                        ),
+                        onTap: () => context.go('${AppRouter.courses}/${c.id}', extra: c),
                       );
                     },
                   );

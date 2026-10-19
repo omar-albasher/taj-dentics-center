@@ -1,3 +1,5 @@
+import '../../features/courses/presentation/course_detail_screen.dart';
+import '../../features/courses/domain/course_model.dart';
 import 'package:admin_dashboard/core/shell/app_shell.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -65,7 +67,22 @@ class AppRouter {
               ),
             ],
           ),
-          GoRoute(path: courses, builder: (_, __) => const CoursesScreen()),
+          GoRoute(
+            path: courses,
+            builder: (_, __) => const CoursesScreen(),
+            routes: [
+              GoRoute(
+                path: ':id',
+                builder: (context, state) {
+                  final id = state.pathParameters['id']!;
+                  final course = state.extra is CourseModel
+                      ? state.extra as CourseModel
+                      : null;
+                  return CourseDetailScreen(courseId: id, course: course);
+                },
+              ),
+            ],
+          ),
           GoRoute(path: sessions, builder: (_, __) => const SessionsScreen()),
           GoRoute(path: payments, builder: (_, __) => const PaymentsScreen()),
           GoRoute(path: expenses, builder: (_, __) => const ExpensesScreen()),

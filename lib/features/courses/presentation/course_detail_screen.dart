@@ -1,3 +1,5 @@
+import 'package:go_router/go_router.dart';
+import '../../../core/router/app_router.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/utils/app_formatters.dart';
@@ -10,11 +12,82 @@ import '../domain/cohort_model.dart';
 import '../../trainees/data/trainees_repository.dart';
 
 class CourseDetailScreen extends ConsumerWidget {
-  final CourseModel course;
-  const CourseDetailScreen({super.key, required this.course});
+  final String courseId;
+  final CourseModel? course;
+
+  const CourseDetailScreen({
+    super.key,
+    required this.courseId,
+    this.course,
+  });
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    if (course != null) {
+      return _buildContent(context, ref, course!);
+    }
+
+    final courseAsync = ref.watch(courseByIdProvider(courseId));
+
+    return courseAsync.when(
+      loading: () => const Scaffold(
+        backgroundColor: AppColors.background,
+        body: Center(
+          child: CircularProgressIndicator(color: AppColors.gold),
+        ),
+      ),
+      error: (e, _) => Scaffold(
+        backgroundColor: AppColors.background,
+        appBar: AppBar(
+          backgroundColor: AppColors.background,
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back_ios, color: AppColors.gold),
+            onPressed: () => context.canPop() ? context.pop() : context.go(AppRouter.courses),
+          ),
+        ),
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.error_outline, color: AppColors.error, size: 48),
+              const SizedBox(height: 16),
+              Text('حدث خطأ: $e',
+                  style: const TextStyle(color: AppColors.error, fontFamily: 'Cairo')),
+              const SizedBox(height: 12),
+              ElevatedButton(
+                onPressed: () => ref.invalidate(courseByIdProvider(courseId)),
+                child: const Text('إعادة المحاولة',
+                    style: TextStyle(fontFamily: 'Cairo')),
+              ),
+            ],
+          ),
+        ),
+      ),
+      data: (loadedCourse) {
+        if (loadedCourse == null) {
+          return Scaffold(
+            backgroundColor: AppColors.background,
+            appBar: AppBar(
+              backgroundColor: AppColors.background,
+              leading: IconButton(
+                icon: const Icon(Icons.arrow_back_ios, color: AppColors.gold),
+                onPressed: () => context.canPop() ? context.pop() : context.go(AppRouter.courses),
+              ),
+            ),
+            body: const Center(
+              child: Text(
+                'الكورس غير موجود أو تم حذفه',
+                style: TextStyle(color: AppColors.textSecondary, fontFamily: 'Cairo'),
+              ),
+            ),
+          );
+        }
+        return _buildContent(context, ref, loadedCourse);
+      },
+    );
+  }
+
+  Widget _buildContent(BuildContext context, WidgetRef ref, CourseModel course) {
     final cohortsAsync = ref.watch(cohortsByCourseProvider(course.id));
     final fmt = AppFormatters.amount;
 
@@ -32,11 +105,11 @@ class CourseDetailScreen extends ConsumerWidget {
         ),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_ios, color: AppColors.gold),
-          onPressed: () => Navigator.pop(context),
+          onPressed: () => context.canPop() ? context.pop() : context.go(AppRouter.courses),
         ),
         actions: [
           ElevatedButton.icon(
-            onPressed: () => _showAddCohortDialog(context, ref),
+            onPressed: () => _showAddCohortDialog(context, ref, course),
             icon: const Icon(Icons.add, size: 18),
             label: const Text('إضافة مجموعة',
                 style: TextStyle(fontFamily: 'Cairo', fontSize: 13)),
@@ -157,7 +230,7 @@ class CourseDetailScreen extends ConsumerWidget {
                       return _CohortCard(
                         cohort: cohort,
                         course: course,
-                        onEnroll: () => _showEnrollDialog(context, ref, cohort),
+                        onEnroll: () => _showEnrollDialog(context, ref, cohort, course),
                       );
                     },
                   );
@@ -170,7 +243,7 @@ class CourseDetailScreen extends ConsumerWidget {
     );
   }
 
-  void _showAddCohortDialog(BuildContext context, WidgetRef ref) {
+  void _showAddCohortDialog(BuildContext context, WidgetRef ref, CourseModel course) {
     showDialog(
       context: context,
       builder: (_) => _AddCohortDialog(
@@ -181,7 +254,7 @@ class CourseDetailScreen extends ConsumerWidget {
   }
 
   void _showEnrollDialog(
-      BuildContext context, WidgetRef ref, CohortModel cohort) {
+      BuildContext context, WidgetRef ref, CohortModel cohort, CourseModel course) {
     showDialog(
       context: context,
       builder: (_) => _EnrollTraineeDialog(
