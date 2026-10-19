@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:intl/intl.dart';
+import '../../../core/utils/app_formatters.dart';
 import 'package:admin_dashboard/core/widgets/app_error_widget.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/utils/responsive.dart';
@@ -51,12 +51,12 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
                 // Group sessions by date
                 final Map<String, List<AdminSessionModel>> sessionsByDate = {};
                 for (final s in sessions) {
-                  final key = DateFormat('yyyy-MM-dd').format(s.scheduledAt);
+                  final key = AppFormatters.dayKey.format(s.scheduledAt);
                   sessionsByDate.putIfAbsent(key, () => []).add(s);
                 }
 
                 final selectedKey = _selectedDay != null
-                    ? DateFormat('yyyy-MM-dd').format(_selectedDay!)
+                    ? AppFormatters.dayKey.format(_selectedDay!)
                     : null;
 
                 final selectedSessions = selectedKey != null
@@ -96,7 +96,7 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
                                     ),
                                     Expanded(
                                       child: Text(
-                                        DateFormat('MMMM yyyy', 'ar')
+                                        AppFormatters.monthYearAr
                                             .format(_focusedMonth),
                                         style: TextStyle(
                                           fontSize:
@@ -173,7 +173,7 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
                                     Responsive.spacing(context, 16)),
                                 child: Text(
                                   _selectedDay != null
-                                      ? DateFormat('d MMMM yyyy', 'ar')
+                                      ? AppFormatters.dateLongAr
                                           .format(_selectedDay!)
                                       : 'اختر يوماً',
                                   style: TextStyle(
@@ -263,7 +263,7 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
                                                 Row(
                                                   children: [
                                                     Text(
-                                                      DateFormat('HH:mm')
+                                                      AppFormatters.timeOnly
                                                           .format(
                                                               s.scheduledAt),
                                                       style: TextStyle(
@@ -335,11 +335,11 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
         final day = days[index];
         if (day == null) return const SizedBox();
 
-        final key = DateFormat('yyyy-MM-dd').format(day);
+        final key = AppFormatters.dayKey.format(day);
         final hasSessions = sessionsByDate.containsKey(key);
         final isSelected = _selectedDay != null &&
-            DateFormat('yyyy-MM-dd').format(_selectedDay!) == key;
-        final isToday = DateFormat('yyyy-MM-dd').format(DateTime.now()) == key;
+            AppFormatters.dayKey.format(_selectedDay!) == key;
+        final isToday = AppFormatters.dayKey.format(DateTime.now()) == key;
 
         // Count sessions by status
         final daySessions = sessionsByDate[key] ?? [];

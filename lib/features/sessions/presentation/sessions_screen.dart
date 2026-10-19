@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:admin_dashboard/core/widgets/app_error_widget.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:intl/intl.dart';
+import '../../../core/utils/app_formatters.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/utils/responsive.dart';
 import '../data/admin_sessions_repository.dart';
@@ -181,7 +181,7 @@ class _SessionCardState extends ConsumerState<_SessionCard> {
 
   @override
   Widget build(BuildContext context) {
-    final fmt = DateFormat('yyyy/MM/dd — HH:mm');
+    final fmt = AppFormatters.dateTime;
 
     Color statusColor;
     String statusLabel;
@@ -531,7 +531,7 @@ class _AttendanceDialog extends ConsumerWidget {
                                   fontWeight: FontWeight.w700)),
                           trailing: date != null
                               ? Text(
-                                  DateFormat('HH:mm').format(date),
+                                  AppFormatters.timeOnly.format(date),
                                   style: const TextStyle(
                                       color: AppColors.textSecondary,
                                       fontFamily: 'Cairo'),
@@ -725,7 +725,7 @@ class _CreateSessionDialogState extends ConsumerState<_CreateSessionDialog> {
                           color: AppColors.gold, size: 20),
                       SizedBox(width: Responsive.spacing(context, 8)),
                       Text(
-                        DateFormat('yyyy/MM/dd — HH:mm').format(_scheduledAt),
+                        AppFormatters.dateTime.format(_scheduledAt),
                         style: const TextStyle(
                             color: AppColors.textPrimary, fontFamily: 'Cairo'),
                       ),

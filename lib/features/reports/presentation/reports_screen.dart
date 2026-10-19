@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:intl/intl.dart';
+import '../../../core/utils/app_formatters.dart';
 import 'package:csv/csv.dart';
 import 'package:file_saver/file_saver.dart';
 import 'package:admin_dashboard/core/widgets/app_error_widget.dart';
@@ -112,7 +112,7 @@ class _ProfitLossTab extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final reportAsync = ref.watch(profitLossProvider);
-    final fmt = NumberFormat('#,###');
+    final fmt = AppFormatters.amount;
 
     return reportAsync.when(
       loading: () =>
@@ -242,7 +242,7 @@ class _ProfitLossTab extends ConsumerWidget {
                           final profit =
                               (r['net_profit'] as num?)?.toDouble() ?? 0;
                           final month = r['month'] != null
-                              ? DateFormat('MMM yyyy', 'ar')
+                              ? AppFormatters.monthShortAr
                                   .format(DateTime.parse(r['month']))
                               : '';
 
@@ -315,7 +315,7 @@ class _OverdueReportTab extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final reportAsync = ref.watch(overdueReportProvider);
-    final fmt = NumberFormat('#,###');
+    final fmt = AppFormatters.amount;
 
     return reportAsync.when(
       loading: () =>
@@ -462,7 +462,7 @@ class _CourseRevenueTab extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final reportAsync = ref.watch(courseRevenueProvider);
-    final fmt = NumberFormat('#,###');
+    final fmt = AppFormatters.amount;
 
     return reportAsync.when(
       loading: () =>
@@ -784,7 +784,7 @@ class _PaymentMethodsAndCashTab extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final cashAsync = ref.watch(cashVsAccrualProvider);
     final methodsAsync = ref.watch(revenueByMethodProvider);
-    final fmt = NumberFormat('#,###');
+    final fmt = AppFormatters.amount;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -996,7 +996,7 @@ class _DebtAgingAndDiscountsTab extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final agingAsync = ref.watch(debtAgingReportProvider);
     final discountsAsync = ref.watch(discountsReportProvider);
-    final fmt = NumberFormat('#,###');
+    final fmt = AppFormatters.amount;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1186,7 +1186,7 @@ class _ExpensesByCategoryTab extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final reportAsync = ref.watch(expensesByCategoryProvider);
-    final fmt = NumberFormat('#,###');
+    final fmt = AppFormatters.amount;
 
     return reportAsync.when(
       loading: () => const Center(child: CircularProgressIndicator(color: AppColors.gold)),

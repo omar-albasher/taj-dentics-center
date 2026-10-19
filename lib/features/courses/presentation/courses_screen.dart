@@ -1,7 +1,7 @@
 import 'package:admin_dashboard/features/courses/presentation/course_detail_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:intl/intl.dart';
+import '../../../core/utils/app_formatters.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/utils/responsive.dart';
 import '../data/courses_repository.dart';
@@ -136,7 +136,7 @@ class _CourseCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final fmt = NumberFormat('#,###');
+    final fmt = AppFormatters.amount;
 
     return InkWell(
       onTap: onTap,

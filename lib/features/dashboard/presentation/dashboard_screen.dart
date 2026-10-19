@@ -2,7 +2,7 @@ import 'package:admin_dashboard/core/constants/app_colors.dart';
 import 'package:admin_dashboard/core/utils/responsive.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:intl/intl.dart';
+import '../../../core/utils/app_formatters.dart';
 import '../data/dashboard_repository.dart';
 import 'package:admin_dashboard/core/widgets/app_error_widget.dart';
 
@@ -39,7 +39,7 @@ class DashboardScreen extends ConsumerWidget {
                       ),
                     ),
                     Text(
-                      DateFormat('EEEE، d MMMM yyyy', 'ar')
+                      AppFormatters.dayFullAr
                           .format(DateTime.now()),
                       style: TextStyle(
                         fontSize: Responsive.fontSize(context, 14),
@@ -71,7 +71,7 @@ class DashboardScreen extends ConsumerWidget {
                 onRetry: () => ref.invalidate(kpisProvider),
               ),
               data: (data) {
-                final fmt = NumberFormat('#,###');
+                final fmt = AppFormatters.amount;
                 double _v(String key) => (data[key] as num?)?.toDouble() ?? 0.0;
 
                 final paidSYP = _v('total_paid_syp');
@@ -234,7 +234,7 @@ class DashboardScreen extends ConsumerWidget {
   }
 
   String _formatAmount(double amount) =>
-      NumberFormat('#,###').format(amount.toInt());
+      AppFormatters.amount.format(amount.toInt());
 }
 
 

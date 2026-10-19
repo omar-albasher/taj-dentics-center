@@ -3,7 +3,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:admin_dashboard/core/widgets/app_error_widget.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:intl/intl.dart';
+import '../../../core/utils/app_formatters.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/utils/responsive.dart';
 import '../data/users_repository.dart';
@@ -199,7 +199,7 @@ class _UserCardState extends State<_UserCard> {
                 ),
                 if (date != null)
                   Text(
-                    'أُضيف: ${DateFormat('yyyy/MM/dd').format(date)}',
+                    'أُضيف: ${AppFormatters.dateOnly.format(date)}',
                     style: TextStyle(
                       fontSize: Responsive.fontSize(context, 11),
                       color: AppColors.textSecondary,

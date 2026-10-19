@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:intl/intl.dart';
+import '../../../core/utils/app_formatters.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/utils/responsive.dart';
 import '../data/expenses_repository.dart';
@@ -11,7 +11,7 @@ class ExpensesScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final expensesAsync = ref.watch(expensesProvider);
-    final fmt = NumberFormat('#,###');
+    final fmt = AppFormatters.amount;
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -124,7 +124,7 @@ class ExpensesScreen extends ConsumerWidget {
                                             color: AppColors.textSecondary,
                                             fontFamily: 'Cairo')),
                                   Text(
-                                    DateFormat('yyyy/MM/dd')
+                                    AppFormatters.dateOnly
                                         .format(e.expenseDate),
                                     style: TextStyle(
                                         fontSize:
@@ -387,7 +387,7 @@ class _AddExpenseDialogState extends ConsumerState<_AddExpenseDialog> {
                           color: AppColors.gold, size: 20),
                       SizedBox(width: Responsive.spacing(context, 8)),
                       Text(
-                        DateFormat('yyyy/MM/dd').format(_date),
+                        AppFormatters.dateOnly.format(_date),
                         style: const TextStyle(
                             color: AppColors.textPrimary, fontFamily: 'Cairo'),
                       ),

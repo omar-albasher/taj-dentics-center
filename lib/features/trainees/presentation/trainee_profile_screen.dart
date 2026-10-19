@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:intl/intl.dart' hide TextDirection;
+import '../../../core/utils/app_formatters.dart';
 import 'package:admin_dashboard/core/widgets/app_error_widget.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/utils/responsive.dart';
@@ -14,7 +14,7 @@ class TraineeProfileScreen extends ConsumerWidget {
   const TraineeProfileScreen({super.key, required this.traineeId});
 
   String _formatAmount(double amount) =>
-      NumberFormat('#,###').format(amount.toInt());
+      AppFormatters.amount.format(amount.toInt());
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -156,11 +156,11 @@ class TraineeProfileScreen extends ConsumerWidget {
                   if (trainee.batchDate != null)
                     _InfoRow(
                       label: 'تاريخ الدفعة (Batch Date)',
-                      value: DateFormat('yyyy/MM/dd').format(trainee.batchDate!),
+                      value: AppFormatters.dateOnly.format(trainee.batchDate!),
                     ),
                   _InfoRow(
                     label: 'تاريخ التسجيل',
-                    value: DateFormat('yyyy/MM/dd').format(trainee.createdAt),
+                    value: AppFormatters.dateOnly.format(trainee.createdAt),
                   ),
                   _InfoRow(
                     label: 'حالة الحساب',
@@ -348,7 +348,7 @@ class TraineeProfileScreen extends ConsumerWidget {
                     final date = DateTime.tryParse(e['paid_at'] ?? '');
                     return _InfoRow(
                       label: date != null
-                          ? DateFormat('yyyy/MM/dd').format(date)
+                          ? AppFormatters.dateOnly.format(date)
                           : '',
                       value: '${_formatAmount(amount)} ل.س',
                       valueColor: AppColors.success,

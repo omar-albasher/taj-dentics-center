@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:intl/intl.dart';
+import '../../../core/utils/app_formatters.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/utils/responsive.dart';
@@ -16,7 +16,7 @@ class CourseDetailScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final cohortsAsync = ref.watch(cohortsByCourseProvider(course.id));
-    final fmt = NumberFormat('#,###');
+    final fmt = AppFormatters.amount;
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -241,7 +241,7 @@ class _CohortCard extends StatelessWidget {
                 ),
                 if (cohort.startsAt != null)
                   Text(
-                    'تبدأ: ${DateFormat('yyyy/MM/dd').format(cohort.startsAt!)}',
+                    'تبدأ: ${AppFormatters.dateOnly.format(cohort.startsAt!)}',
                     style: TextStyle(
                       fontSize: Responsive.fontSize(context, 12),
                       color: AppColors.textSecondary,
@@ -407,7 +407,7 @@ class _AddCohortDialogState extends ConsumerState<_AddCohortDialog> {
                       SizedBox(width: Responsive.spacing(context, 8)),
                       Text(
                         _startsAt != null
-                            ? DateFormat('yyyy/MM/dd').format(_startsAt!)
+                            ? AppFormatters.dateOnly.format(_startsAt!)
                             : 'تاريخ البدء (اختياري)',
                         style: TextStyle(
                           color: _startsAt != null

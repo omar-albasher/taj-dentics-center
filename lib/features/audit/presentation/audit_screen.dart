@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:intl/intl.dart';
+import '../../../core/utils/app_formatters.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/utils/responsive.dart';
@@ -235,7 +235,7 @@ class _AuditScreenState extends ConsumerState<AuditScreen> {
                                 crossAxisAlignment: CrossAxisAlignment.end,
                                 children: [
                                   Text(
-                                    DateFormat('yyyy/MM/dd').format(date),
+                                    AppFormatters.dateOnly.format(date),
                                     style: TextStyle(
                                         fontSize:
                                             Responsive.fontSize(context, 11),
@@ -243,7 +243,7 @@ class _AuditScreenState extends ConsumerState<AuditScreen> {
                                         fontFamily: 'Cairo'),
                                   ),
                                   Text(
-                                    DateFormat('HH:mm').format(date),
+                                    AppFormatters.timeOnly.format(date),
                                     style: TextStyle(
                                         fontSize:
                                             Responsive.fontSize(context, 13),

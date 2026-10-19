@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:intl/intl.dart';
+import '../../../core/utils/app_formatters.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/utils/responsive.dart';
@@ -149,7 +149,7 @@ class _RecentPaymentsTabState extends ConsumerState<_RecentPaymentsTab> {
       method: _methodFilter == 'all' ? null : _methodFilter,
     );
     final paymentsAsync = ref.watch(recentPaymentsProvider(params));
-    final fmt = NumberFormat('#,###');
+    final fmt = AppFormatters.amount;
 
     return Column(
       children: [
@@ -300,7 +300,7 @@ class _RecentPaymentsTabState extends ConsumerState<_RecentPaymentsTab> {
                                       fontFamily: 'Cairo')),
                               if (date != null)
                                 Text(
-                                  DateFormat('yyyy/MM/dd').format(date),
+                                  AppFormatters.dateOnly.format(date),
                                   style: TextStyle(
                                       fontSize: Responsive.fontSize(context, 11),
                                       color: AppColors.textSecondary,
@@ -390,7 +390,7 @@ class _EnrollmentsTabState extends ConsumerState<_EnrollmentsTab> {
       status: _statusFilter == 'all' ? null : _statusFilter,
     );
     final enrollmentsAsync = ref.watch(allEnrollmentsProvider(params));
-    final fmt = NumberFormat('#,###');
+    final fmt = AppFormatters.amount;
 
     return Column(
       children: [
@@ -592,7 +592,7 @@ class _OverdueTabState extends ConsumerState<_OverdueTab> {
   @override
   Widget build(BuildContext context) {
     final overdueAsync = ref.watch(overduePaymentsProvider(_searchQuery.isEmpty ? null : _searchQuery));
-    final fmt = NumberFormat('#,###');
+    final fmt = AppFormatters.amount;
 
     return Column(
       children: [
@@ -1182,7 +1182,7 @@ class _AddPaymentDialogState extends ConsumerState<_AddPaymentDialog> {
                             const SizedBox(width: 8),
                             Expanded(
                               child: Text(
-                                DateFormat('yyyy/MM/dd').format(_paidAt),
+                                AppFormatters.dateOnly.format(_paidAt),
                                 style: const TextStyle(
                                   color: AppColors.textPrimary,
                                   fontFamily: 'Cairo',

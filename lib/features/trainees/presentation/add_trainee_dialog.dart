@@ -1,4 +1,4 @@
-import 'package:intl/intl.dart' hide TextDirection;
+import '../../../core/utils/app_formatters.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/constants/app_colors.dart';
@@ -297,7 +297,7 @@ class _AddTraineeDialogState extends ConsumerState<AddTraineeDialog> {
                                   Expanded(
                                     child: Text(
                                       _batchDate != null
-                                          ? 'تاريخ الدفعة: ${DateFormat("yyyy/MM/dd").format(_batchDate!)}'
+                                          ? 'تاريخ الدفعة: ${AppFormatters.dateOnly.format(_batchDate!)}'
                                           : 'تحديد تاريخ الدفعة (اختياري)',
                                       style: TextStyle(
                                         color: _batchDate != null ? AppColors.textPrimary : AppColors.textSecondary,
