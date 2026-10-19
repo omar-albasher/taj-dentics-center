@@ -660,7 +660,7 @@ class _EnrollTraineeDialogState extends ConsumerState<_EnrollTraineeDialog> {
                 error: (e, _) => Text(AppErrorHandler.friendlyMessage(e),
                     style: const TextStyle(color: AppColors.error)),
                 data: (trainees) => DropdownButtonFormField<String>(
-                  value: _selectedTraineeId,
+                  initialValue: _selectedTraineeId,
                   dropdownColor: AppColors.cardBg,
                   decoration: InputDecoration(
                     labelText: 'اختر المتدرب *',
@@ -733,7 +733,7 @@ class _EnrollTraineeDialogState extends ConsumerState<_EnrollTraineeDialog> {
                   SizedBox(width: Responsive.spacing(context, 12)),
                   Expanded(
                     child: DropdownButtonFormField<String>(
-                      value: _currency,
+                      initialValue: _currency,
                       dropdownColor: AppColors.cardBg,
                       decoration: InputDecoration(
                         labelText: 'العملة',

@@ -137,7 +137,7 @@ class _EnrollInCourseDialogState extends ConsumerState<EnrollInCourseDialog> {
                   }
 
                   return DropdownButtonFormField<String>(
-                    value: _selectedCohortId,
+                    initialValue: _selectedCohortId,
                     dropdownColor: AppColors.cardBg,
                     decoration: InputDecoration(
                       labelText: 'اختر الكورس / المجموعة *',
@@ -225,7 +225,7 @@ class _EnrollInCourseDialogState extends ConsumerState<EnrollInCourseDialog> {
                   SizedBox(width: Responsive.spacing(context, 12)),
                   Expanded(
                     child: DropdownButtonFormField<String>(
-                      value: _currency,
+                      initialValue: _currency,
                       dropdownColor: AppColors.cardBg,
                       decoration: InputDecoration(
                         labelText: 'العملة',

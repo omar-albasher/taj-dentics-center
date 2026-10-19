@@ -183,7 +183,7 @@ class _TemplatesTab extends ConsumerWidget {
                               .toggleTemplate(t.id, v);
                           ref.invalidate(surveyTemplatesProvider);
                         },
-                        activeColor: AppColors.gold,
+                        activeThumbColor: AppColors.gold,
                       ),
                       ElevatedButton(
                         onPressed: () => _sendToAll(context, ref, t),

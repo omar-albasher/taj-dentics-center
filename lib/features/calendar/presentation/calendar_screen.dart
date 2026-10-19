@@ -350,9 +350,11 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
         final hasScheduled = daySessions.any((s) => s.isScheduled);
 
         Color dotColor = AppColors.warning;
-        if (hasOpen)
+        if (hasOpen) {
           dotColor = AppColors.success;
-        else if (hasClosed) dotColor = AppColors.error;
+        } else if (hasClosed) {
+          dotColor = AppColors.error;
+        }
 
         return GestureDetector(
           onTap: () => setState(() => _selectedDay = day),

@@ -462,7 +462,7 @@ class _CourseDialogState extends ConsumerState<_CourseDialog> {
                     Switch(
                       value: _isActive,
                       onChanged: (v) => setState(() => _isActive = v),
-                      activeColor: AppColors.gold,
+                      activeThumbColor: AppColors.gold,
                     ),
                   ],
                 ),

@@ -271,7 +271,7 @@ class _UserCardState extends State<_UserCard> {
                       onChanged: (v) {
                         _handleAction(() async => widget.onToggle(v));
                       },
-                      activeColor: AppColors.gold,
+                      activeThumbColor: AppColors.gold,
                     ),
                   ],
                 ),
@@ -431,7 +431,7 @@ class _AddUserDialogState extends ConsumerState<_AddUserDialog> {
 
               // Role
               DropdownButtonFormField<String>(
-                value: _role,
+                initialValue: _role,
                 dropdownColor: AppColors.cardBg,
                 decoration: InputDecoration(
                   labelText: 'الدور',

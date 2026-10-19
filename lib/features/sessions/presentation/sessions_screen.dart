@@ -655,7 +655,7 @@ class _CreateSessionDialogState extends ConsumerState<_CreateSessionDialog> {
                 error: (e, _) => Text(AppErrorHandler.friendlyMessage(e), style: const TextStyle(color: AppColors.error)),
                 data: (cohorts) {
                   return DropdownButtonFormField<String>(
-                    value: _selectedCohortId,
+                    initialValue: _selectedCohortId,
                     dropdownColor: AppColors.cardBg,
                     decoration: _inputDecoration(
                         'اختر المجموعة *', Icons.group_outlined),

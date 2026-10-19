@@ -73,14 +73,14 @@ class DashboardScreen extends ConsumerWidget {
               ),
               data: (data) {
                 final fmt = AppFormatters.amount;
-                double _v(String key) => (data[key] as num?)?.toDouble() ?? 0.0;
+                double getVal(String key) => (data[key] as num?)?.toDouble() ?? 0.0;
 
-                final paidSYP = _v('total_paid_syp');
-                final paidUSD = _v('total_paid_usd');
-                final profitSYP = _v('net_profit_syp');
-                final profitUSD = _v('net_profit_usd');
-                final balanceSYP = _v('total_balance_syp');
-                final balanceUSD = _v('total_balance_usd');
+                final paidSYP = getVal('total_paid_syp');
+                final paidUSD = getVal('total_paid_usd');
+                final profitSYP = getVal('net_profit_syp');
+                final profitUSD = getVal('net_profit_usd');
+                final balanceSYP = getVal('total_balance_syp');
+                final balanceUSD = getVal('total_balance_usd');
 
                 final kpis = [
                   _KpiData(

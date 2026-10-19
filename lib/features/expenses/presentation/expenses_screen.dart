@@ -284,7 +284,7 @@ class _AddExpenseDialogState extends ConsumerState<_AddExpenseDialog> {
 
               // Category
               DropdownButtonFormField<String>(
-                value: _category,
+                initialValue: _category,
                 dropdownColor: AppColors.cardBg,
                 decoration: _inputDecoration('الفئة', Icons.category_outlined),
                 items: const [
@@ -339,7 +339,7 @@ class _AddExpenseDialogState extends ConsumerState<_AddExpenseDialog> {
                   SizedBox(width: Responsive.spacing(context, 12)),
                   Expanded(
                     child: DropdownButtonFormField<String>(
-                      value: _currency,
+                      initialValue: _currency,
                       dropdownColor: AppColors.cardBg,
                       decoration:
                           _inputDecoration('العملة', Icons.currency_exchange),
