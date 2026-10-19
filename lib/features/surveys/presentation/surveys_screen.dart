@@ -1,3 +1,4 @@
+import '../../../core/utils/app_error_handler.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/constants/app_colors.dart';
@@ -108,7 +109,7 @@ class _TemplatesTab extends ConsumerWidget {
       loading: () =>
           const Center(child: CircularProgressIndicator(color: AppColors.gold)),
       error: (e, _) => Center(
-          child: Text('خطأ: $e',
+          child: Text(AppErrorHandler.friendlyMessage(e),
               style: const TextStyle(
                   color: AppColors.error, fontFamily: 'Cairo'))),
       data: (templates) {
@@ -224,7 +225,7 @@ class _TemplatesTab extends ConsumerWidget {
     } catch (e) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('خطأ: $e'), backgroundColor: AppColors.error),
+          SnackBar(content: Text(AppErrorHandler.friendlyMessage(e)), backgroundColor: AppColors.error),
         );
       }
     }
@@ -241,7 +242,7 @@ class _ResponsesTab extends ConsumerWidget {
       loading: () =>
           const Center(child: CircularProgressIndicator(color: AppColors.gold)),
       error: (e, _) => Center(
-          child: Text('خطأ: $e',
+          child: Text(AppErrorHandler.friendlyMessage(e),
               style: const TextStyle(
                   color: AppColors.error, fontFamily: 'Cairo'))),
       data: (dispatches) {
@@ -365,7 +366,7 @@ class _StatsTab extends ConsumerWidget {
       loading: () =>
           const Center(child: CircularProgressIndicator(color: AppColors.gold)),
       error: (e, _) => Center(
-          child: Text('خطأ: $e',
+          child: Text(AppErrorHandler.friendlyMessage(e),
               style: const TextStyle(
                   color: AppColors.error, fontFamily: 'Cairo'))),
       data: (dispatches) {
@@ -601,7 +602,7 @@ class _AddTemplateDialogState extends ConsumerState<_AddTemplateDialog> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('خطأ: $e'), backgroundColor: AppColors.error),
+        SnackBar(content: Text(AppErrorHandler.friendlyMessage(e)), backgroundColor: AppColors.error),
       );
     } finally {
       if (mounted) setState(() => _loading = false);

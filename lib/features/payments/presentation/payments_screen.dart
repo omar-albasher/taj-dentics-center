@@ -1,3 +1,4 @@
+import '../../../core/utils/app_error_handler.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -222,7 +223,7 @@ class _RecentPaymentsTabState extends ConsumerState<_RecentPaymentsTab> {
                 children: [
                   const Icon(Icons.error_outline, color: AppColors.error, size: 48),
                   const SizedBox(height: 16),
-                  Text('خطأ: $e',
+                  Text(AppErrorHandler.friendlyMessage(e),
                       style: const TextStyle(
                           color: AppColors.error, fontFamily: 'Cairo')),
                   const SizedBox(height: 12),
@@ -457,7 +458,7 @@ class _EnrollmentsTabState extends ConsumerState<_EnrollmentsTab> {
             loading: () =>
                 const Center(child: CircularProgressIndicator(color: AppColors.gold)),
             error: (e, _) => Center(
-              child: Text('خطأ: $e',
+              child: Text(AppErrorHandler.friendlyMessage(e),
                   style:
                       const TextStyle(color: AppColors.error, fontFamily: 'Cairo')),
             ),
@@ -630,7 +631,7 @@ class _OverdueTabState extends ConsumerState<_OverdueTab> {
             loading: () =>
                 const Center(child: CircularProgressIndicator(color: AppColors.gold)),
             error: (e, _) => Center(
-              child: Text('خطأ: $e',
+              child: Text(AppErrorHandler.friendlyMessage(e),
                   style:
                       const TextStyle(color: AppColors.error, fontFamily: 'Cairo')),
             ),
@@ -863,7 +864,7 @@ class _AddPaymentDialogState extends ConsumerState<_AddPaymentDialog> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('خطأ: $e', style: const TextStyle(fontFamily: 'Cairo')), backgroundColor: AppColors.error),
+        SnackBar(content: Text(AppErrorHandler.friendlyMessage(e), style: const TextStyle(fontFamily: 'Cairo')), backgroundColor: AppColors.error),
       );
     } finally {
       if (mounted) setState(() => _loading = false);
@@ -919,7 +920,7 @@ class _AddPaymentDialogState extends ConsumerState<_AddPaymentDialog> {
                 enrollmentsAsync.when(
                   loading: () =>
                       const CircularProgressIndicator(color: AppColors.gold),
-                  error: (e, _) => Text('خطأ: $e', style: const TextStyle(color: AppColors.error, fontFamily: 'Cairo')),
+                  error: (e, _) => Text(AppErrorHandler.friendlyMessage(e), style: const TextStyle(color: AppColors.error, fontFamily: 'Cairo')),
                   data: (enrollments) => DropdownButtonFormField<String>(
                     initialValue: _selectedEnrollmentId,
                     dropdownColor: AppColors.cardBg,

@@ -1,3 +1,4 @@
+import '../../../core/utils/app_error_handler.dart';
 import '../../../core/utils/app_formatters.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -96,7 +97,7 @@ class _AddTraineeDialogState extends ConsumerState<AddTraineeDialog> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('خطأ: ${e.toString()}'),
+          content: Text(AppErrorHandler.friendlyMessage(e)),
           backgroundColor: AppColors.error,
         ),
       );

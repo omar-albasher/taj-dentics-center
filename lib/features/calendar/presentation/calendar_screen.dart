@@ -1,3 +1,4 @@
+import '../../../core/utils/app_error_handler.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/utils/app_formatters.dart';
@@ -44,7 +45,7 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
                 child: CircularProgressIndicator(color: AppColors.gold),
               ),
               error: (e, _) => AppErrorWidget(
-                message: 'خطأ: $e',
+                message: AppErrorHandler.friendlyMessage(e),
                 onRetry: () => ref.invalidate(adminSessionsProvider),
               ),
               data: (sessions) {

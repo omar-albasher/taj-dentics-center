@@ -1,3 +1,4 @@
+import '../../../core/utils/app_error_handler.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/router/app_router.dart';
 import 'package:flutter/material.dart';
@@ -51,7 +52,7 @@ class CourseDetailScreen extends ConsumerWidget {
             children: [
               const Icon(Icons.error_outline, color: AppColors.error, size: 48),
               const SizedBox(height: 16),
-              Text('حدث خطأ: $e',
+              Text(AppErrorHandler.friendlyMessage(e),
                   style: const TextStyle(color: AppColors.error, fontFamily: 'Cairo')),
               const SizedBox(height: 12),
               ElevatedButton(
@@ -203,7 +204,7 @@ class CourseDetailScreen extends ConsumerWidget {
                   child: CircularProgressIndicator(color: AppColors.gold),
                 ),
                 error: (e, _) => Center(
-                  child: Text('خطأ: $e',
+                  child: Text(AppErrorHandler.friendlyMessage(e),
                       style: const TextStyle(
                           color: AppColors.error, fontFamily: 'Cairo')),
                 ),
@@ -385,7 +386,7 @@ class _AddCohortDialogState extends ConsumerState<_AddCohortDialog> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('خطأ: $e'), backgroundColor: AppColors.error),
+        SnackBar(content: Text(AppErrorHandler.friendlyMessage(e)), backgroundColor: AppColors.error),
       );
     } finally {
       if (mounted) setState(() => _loading = false);
@@ -606,7 +607,7 @@ class _EnrollTraineeDialogState extends ConsumerState<_EnrollTraineeDialog> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('خطأ: $e'), backgroundColor: AppColors.error),
+        SnackBar(content: Text(AppErrorHandler.friendlyMessage(e)), backgroundColor: AppColors.error),
       );
     } finally {
       if (mounted) setState(() => _loading = false);
@@ -656,7 +657,7 @@ class _EnrollTraineeDialogState extends ConsumerState<_EnrollTraineeDialog> {
               traineesAsync.when(
                 loading: () =>
                     const CircularProgressIndicator(color: AppColors.gold),
-                error: (e, _) => Text('خطأ: $e',
+                error: (e, _) => Text(AppErrorHandler.friendlyMessage(e),
                     style: const TextStyle(color: AppColors.error)),
                 data: (trainees) => DropdownButtonFormField<String>(
                   value: _selectedTraineeId,

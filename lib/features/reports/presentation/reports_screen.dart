@@ -1,3 +1,4 @@
+import '../../../core/utils/app_error_handler.dart';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -118,7 +119,7 @@ class _ProfitLossTab extends ConsumerWidget {
       loading: () =>
           const Center(child: CircularProgressIndicator(color: AppColors.gold)),
       error: (e, _) => AppErrorWidget(
-        message: 'خطأ: $e',
+        message: AppErrorHandler.friendlyMessage(e),
         onRetry: () => ref.invalidate(profitLossProvider),
       ),
       data: (rows) {
@@ -321,7 +322,7 @@ class _OverdueReportTab extends ConsumerWidget {
       loading: () =>
           const Center(child: CircularProgressIndicator(color: AppColors.gold)),
       error: (e, _) => AppErrorWidget(
-        message: 'خطأ: $e',
+        message: AppErrorHandler.friendlyMessage(e),
         onRetry: () => ref.invalidate(overdueReportProvider),
       ),
       data: (rows) {
@@ -468,7 +469,7 @@ class _CourseRevenueTab extends ConsumerWidget {
       loading: () =>
           const Center(child: CircularProgressIndicator(color: AppColors.gold)),
       error: (e, _) => AppErrorWidget(
-        message: 'خطأ: $e',
+        message: AppErrorHandler.friendlyMessage(e),
         onRetry: () => ref.invalidate(courseRevenueProvider),
       ),
       data: (rows) {
@@ -640,7 +641,7 @@ class _AttendanceReportTab extends ConsumerWidget {
       loading: () =>
           const Center(child: CircularProgressIndicator(color: AppColors.gold)),
       error: (e, _) => AppErrorWidget(
-        message: 'خطأ: $e',
+        message: AppErrorHandler.friendlyMessage(e),
         onRetry: () => ref.invalidate(attendanceReportProvider),
       ),
       data: (rows) {
@@ -834,7 +835,7 @@ class _PaymentMethodsAndCashTab extends ConsumerWidget {
         Expanded(
           child: methodsAsync.when(
             loading: () => const Center(child: CircularProgressIndicator(color: AppColors.gold)),
-            error: (e, _) => AppErrorWidget(message: 'خطأ: $e', onRetry: () => ref.invalidate(revenueByMethodProvider)),
+            error: (e, _) => AppErrorWidget(message: AppErrorHandler.friendlyMessage(e), onRetry: () => ref.invalidate(revenueByMethodProvider)),
             data: (rows) {
               if (rows.isEmpty) {
                 return Center(
@@ -1095,7 +1096,7 @@ class _DebtAgingAndDiscountsTab extends ConsumerWidget {
         Expanded(
           child: discountsAsync.when(
             loading: () => const Center(child: CircularProgressIndicator(color: AppColors.gold)),
-            error: (e, _) => AppErrorWidget(message: 'خطأ: $e', onRetry: () => ref.invalidate(discountsReportProvider)),
+            error: (e, _) => AppErrorWidget(message: AppErrorHandler.friendlyMessage(e), onRetry: () => ref.invalidate(discountsReportProvider)),
             data: (discounts) {
               if (discounts.isEmpty) {
                 return Center(
@@ -1190,7 +1191,7 @@ class _ExpensesByCategoryTab extends ConsumerWidget {
 
     return reportAsync.when(
       loading: () => const Center(child: CircularProgressIndicator(color: AppColors.gold)),
-      error: (e, _) => AppErrorWidget(message: 'خطأ: $e', onRetry: () => ref.invalidate(expensesByCategoryProvider)),
+      error: (e, _) => AppErrorWidget(message: AppErrorHandler.friendlyMessage(e), onRetry: () => ref.invalidate(expensesByCategoryProvider)),
       data: (rows) {
         if (rows.isEmpty) {
           return Center(

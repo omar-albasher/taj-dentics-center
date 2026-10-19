@@ -1,3 +1,4 @@
+import '../../../core/utils/app_error_handler.dart';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
@@ -49,7 +50,7 @@ class UsersScreen extends ConsumerWidget {
                   child: CircularProgressIndicator(color: AppColors.gold),
                 ),
                 error: (e, _) => AppErrorWidget(
-                  message: 'خطأ: $e',
+                  message: AppErrorHandler.friendlyMessage(e),
                   onRetry: () => ref.invalidate(usersProvider),
                 ),
                 data: (users) {
@@ -131,7 +132,7 @@ class _UserCardState extends State<_UserCard> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('خطأ: $e'), backgroundColor: AppColors.error),
+          SnackBar(content: Text(AppErrorHandler.friendlyMessage(e)), backgroundColor: AppColors.error),
         );
       }
     } finally {
@@ -345,7 +346,7 @@ class _AddUserDialogState extends ConsumerState<_AddUserDialog> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('خطأ: $e'), backgroundColor: AppColors.error),
+        SnackBar(content: Text(AppErrorHandler.friendlyMessage(e)), backgroundColor: AppColors.error),
       );
     } finally {
       if (mounted) setState(() => _loading = false);

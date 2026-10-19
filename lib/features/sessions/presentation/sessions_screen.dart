@@ -1,3 +1,4 @@
+import '../../../core/utils/app_error_handler.dart';
 import 'package:flutter/material.dart';
 import 'package:admin_dashboard/core/widgets/app_error_widget.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -84,7 +85,7 @@ class _SessionsScreenState extends ConsumerState<SessionsScreen>
                       child: CircularProgressIndicator(color: AppColors.gold),
                     ),
                     error: (e, _) => AppErrorWidget(
-                      message: 'خطأ: $e',
+                      message: AppErrorHandler.friendlyMessage(e),
                       onRetry: () => ref.invalidate(adminSessionsProvider),
                     ),
                     data: (sessions) {
@@ -375,7 +376,7 @@ class _SessionCardState extends ConsumerState<_SessionCard> {
     } catch (e) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('خطأ: $e'), backgroundColor: AppColors.error),
+          SnackBar(content: Text(AppErrorHandler.friendlyMessage(e)), backgroundColor: AppColors.error),
         );
       }
     } finally {
@@ -431,7 +432,7 @@ class _SessionCardState extends ConsumerState<_SessionCard> {
     } catch (e) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('خطأ: $e'), backgroundColor: AppColors.error),
+          SnackBar(content: Text(AppErrorHandler.friendlyMessage(e)), backgroundColor: AppColors.error),
         );
       }
     } finally {
@@ -492,7 +493,7 @@ class _AttendanceDialog extends ConsumerWidget {
                     child: CircularProgressIndicator(color: AppColors.gold),
                   ),
                   error: (e, _) => Center(
-                    child: Text('خطأ: $e',
+                    child: Text(AppErrorHandler.friendlyMessage(e),
                         style: const TextStyle(
                             color: AppColors.error, fontFamily: 'Cairo')),
                   ),
@@ -604,7 +605,7 @@ class _CreateSessionDialogState extends ConsumerState<_CreateSessionDialog> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('خطأ: $e'), backgroundColor: AppColors.error),
+        SnackBar(content: Text(AppErrorHandler.friendlyMessage(e)), backgroundColor: AppColors.error),
       );
     } finally {
       if (mounted) setState(() => _loading = false);
@@ -651,7 +652,7 @@ class _CreateSessionDialogState extends ConsumerState<_CreateSessionDialog> {
               cohortsAsync.when(
                 loading: () =>
                     const Center(child: CircularProgressIndicator(color: AppColors.gold)),
-                error: (e, _) => Text('خطأ: $e', style: const TextStyle(color: AppColors.error)),
+                error: (e, _) => Text(AppErrorHandler.friendlyMessage(e), style: const TextStyle(color: AppColors.error)),
                 data: (cohorts) {
                   return DropdownButtonFormField<String>(
                     value: _selectedCohortId,

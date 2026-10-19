@@ -1,3 +1,4 @@
+import '../../../core/utils/app_error_handler.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/utils/app_formatters.dart';
@@ -53,7 +54,7 @@ class ExpensesScreen extends ConsumerWidget {
                       const Icon(Icons.error_outline,
                           color: AppColors.error, size: 48),
                       const SizedBox(height: 16),
-                      Text('خطأ: $e',
+                      Text(AppErrorHandler.friendlyMessage(e),
                           style: const TextStyle(
                               color: AppColors.error, fontFamily: 'Cairo')),
                       const SizedBox(height: 12),
@@ -240,7 +241,7 @@ class _AddExpenseDialogState extends ConsumerState<_AddExpenseDialog> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('خطأ: $e'), backgroundColor: AppColors.error),
+        SnackBar(content: Text(AppErrorHandler.friendlyMessage(e)), backgroundColor: AppColors.error),
       );
     } finally {
       if (mounted) setState(() => _loading = false);

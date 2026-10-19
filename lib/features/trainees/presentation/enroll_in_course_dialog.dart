@@ -1,3 +1,4 @@
+import '../../../core/utils/app_error_handler.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/constants/app_colors.dart';
@@ -69,7 +70,7 @@ class _EnrollInCourseDialogState extends ConsumerState<EnrollInCourseDialog> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('خطأ: $e'), backgroundColor: AppColors.error),
+        SnackBar(content: Text(AppErrorHandler.friendlyMessage(e)), backgroundColor: AppColors.error),
       );
     } finally {
       if (mounted) setState(() => _loading = false);
@@ -120,7 +121,7 @@ class _EnrollInCourseDialogState extends ConsumerState<EnrollInCourseDialog> {
               cohortsAsync.when(
                 loading: () =>
                     const CircularProgressIndicator(color: AppColors.gold),
-                error: (e, _) => Text('خطأ: $e',
+                error: (e, _) => Text(AppErrorHandler.friendlyMessage(e),
                     style: const TextStyle(
                         color: AppColors.error, fontFamily: 'Cairo')),
                 data: (cohorts) {

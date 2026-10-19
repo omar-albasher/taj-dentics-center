@@ -1,3 +1,4 @@
+import '../../../core/utils/app_error_handler.dart';
 import 'package:admin_dashboard/core/constants/app_colors.dart';
 import 'package:admin_dashboard/core/utils/responsive.dart';
 import 'package:flutter/material.dart';
@@ -67,7 +68,7 @@ class DashboardScreen extends ConsumerWidget {
                 child: CircularProgressIndicator(color: AppColors.gold),
               ),
               error: (e, _) => AppErrorWidget(
-                message: 'خطأ: $e',
+                message: AppErrorHandler.friendlyMessage(e),
                 onRetry: () => ref.invalidate(kpisProvider),
               ),
               data: (data) {
@@ -144,7 +145,7 @@ class DashboardScreen extends ConsumerWidget {
                 child: CircularProgressIndicator(color: AppColors.gold),
               ),
               error: (e, _) => AppErrorWidget(
-                message: 'خطأ: $e',
+                message: AppErrorHandler.friendlyMessage(e),
                 onRetry: () => ref.invalidate(overdueProvider),
               ),
               data: (list) {
