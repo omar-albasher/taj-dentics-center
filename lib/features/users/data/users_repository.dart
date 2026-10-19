@@ -1,4 +1,4 @@
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+﻿import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 class UsersRepository {
@@ -28,7 +28,7 @@ class UsersRepository {
     required String role,
   }) async {
     final response = await _client.functions.invoke(
-      'quick-endpoint',
+      'create-trainee',
       body: {
         'full_name': fullName,
         'email': email,

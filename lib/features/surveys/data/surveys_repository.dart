@@ -1,4 +1,4 @@
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+﻿import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../domain/survey_model.dart';
 
@@ -49,38 +49,21 @@ class SurveysRepository {
     return (response as List).map((e) => SurveyDispatch.fromMap(e)).toList();
   }
 
-  /// يرسل استبياناً معيناً لكل المتدربين المسجَّلين حالياً.
-  /// يستخدم at_session_count = 0 كمؤشر خاص بالإرسال اليدوي المباشر
-  /// (مختلف عن العتبات التلقائية 3, 6, 9... التي يولّدها trigger الحضور).
+  /// ÙŠØ±Ø³Ù„ Ø§Ø³ØªØ¨ÙŠØ§Ù†Ø§Ù‹ Ù…Ø¹ÙŠÙ†Ø§Ù‹ Ù„ÙƒÙ„ Ø§Ù„Ù…ØªØ¯Ø±Ø¨ÙŠÙ† Ø§Ù„Ù…Ø³Ø¬ÙŽÙ‘Ù„ÙŠÙ† Ø­Ø§Ù„ÙŠØ§Ù‹.
+  /// ÙŠØ³ØªØ®Ø¯Ù… at_session_count = 0 ÙƒÙ…Ø¤Ø´Ø± Ø®Ø§Øµ Ø¨Ø§Ù„Ø¥Ø±Ø³Ø§Ù„ Ø§Ù„ÙŠØ¯ÙˆÙŠ Ø§Ù„Ù…Ø¨Ø§Ø´Ø±
+  /// (Ù…Ø®ØªÙ„Ù Ø¹Ù† Ø§Ù„Ø¹ØªØ¨Ø§Øª Ø§Ù„ØªÙ„Ù‚Ø§Ø¦ÙŠØ© 3, 6, 9... Ø§Ù„ØªÙŠ ÙŠÙˆÙ„Ù‘Ø¯Ù‡Ø§ trigger Ø§Ù„Ø­Ø¶ÙˆØ±).
   ///
-  /// ملاحظة تصميمية: بما أن UNIQUE(enrollment_id, at_session_count)
-  /// لا يشمل template_id، فإن إرسال استبيان يدوي ثانٍ لنفس المتدرب
-  /// سيُتجاهَل بصمت طالما لم يُسحَب الاستبيان اليدوي الأول بعد —
-  /// وهذا يتوافق مع تصميم النظام الحالي الذي يعتمد قالباً واحداً
-  /// نشطاً (is_active) في كل وقت.
+  /// Ù…Ù„Ø§Ø­Ø¸Ø© ØªØµÙ…ÙŠÙ…ÙŠØ©: Ø¨Ù…Ø§ Ø£Ù† UNIQUE(enrollment_id, at_session_count)
+  /// Ù„Ø§ ÙŠØ´Ù…Ù„ template_idØŒ ÙØ¥Ù† Ø¥Ø±Ø³Ø§Ù„ Ø§Ø³ØªØ¨ÙŠØ§Ù† ÙŠØ¯ÙˆÙŠ Ø«Ø§Ù†Ù Ù„Ù†ÙØ³ Ø§Ù„Ù…ØªØ¯Ø±Ø¨
+  /// Ø³ÙŠÙØªØ¬Ø§Ù‡ÙŽÙ„ Ø¨ØµÙ…Øª Ø·Ø§Ù„Ù…Ø§ Ù„Ù… ÙŠÙØ³Ø­ÙŽØ¨ Ø§Ù„Ø§Ø³ØªØ¨ÙŠØ§Ù† Ø§Ù„ÙŠØ¯ÙˆÙŠ Ø§Ù„Ø£ÙˆÙ„ Ø¨Ø¹Ø¯ â€”
+  /// ÙˆÙ‡Ø°Ø§ ÙŠØªÙˆØ§ÙÙ‚ Ù…Ø¹ ØªØµÙ…ÙŠÙ… Ø§Ù„Ù†Ø¸Ø§Ù… Ø§Ù„Ø­Ø§Ù„ÙŠ Ø§Ù„Ø°ÙŠ ÙŠØ¹ØªÙ…Ø¯ Ù‚Ø§Ù„Ø¨Ø§Ù‹ ÙˆØ§Ø­Ø¯Ø§Ù‹
+  /// Ù†Ø´Ø·Ø§Ù‹ (is_active) ÙÙŠ ÙƒÙ„ ÙˆÙ‚Øª.
   Future<int> sendSurveyToAll(String templateId) async {
-    final enrollments = await _client.from('enrollments').select('id');
-
-    final enrollmentIds =
-        (enrollments as List).map((e) => e['id'] as String).toList();
-
-    if (enrollmentIds.isEmpty) return 0;
-
-    final rows = enrollmentIds
-        .map((id) => {
-              'enrollment_id': id,
-              'template_id': templateId,
-              'at_session_count': 0,
-            })
-        .toList();
-
-    await _client.from('survey_dispatches').upsert(
-          rows,
-          onConflict: 'enrollment_id,at_session_count',
-          ignoreDuplicates: true,
-        );
-
-    return enrollmentIds.length;
+    final response = await _client.rpc(
+      'dispatch_survey_to_all',
+      params: {'p_template_id': templateId},
+    );
+    return (response as num?)?.toInt() ?? 0;
   }
 
   Future<Map<String, dynamic>> getSurveyStats(String templateId) async {

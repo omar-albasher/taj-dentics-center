@@ -1,4 +1,4 @@
-import 'package:flutter/foundation.dart';
+﻿import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -89,9 +89,9 @@ users!trainees_user_id_fkey(
     DateTime? batchDate,
     required String password,
   }) async {
-    // 1. Invoke quick-endpoint to create auth user and base trainee row
+    // 1. Invoke create-trainee to create auth user and base trainee row
     final response = await _client.functions.invoke(
-      'quick-endpoint',
+      'create-trainee',
       body: {
         'full_name': fullName,
         'email': email,
@@ -200,20 +200,20 @@ users!trainees_user_id_fkey(
 final traineesRepositoryProvider =
     Provider<TraineesRepository>((ref) => TraineesRepository());
 
-/// جميع المتدربين (مع البحث بكود المتدرب أو الاسم)
+/// Ø¬Ù…ÙŠØ¹ Ø§Ù„Ù…ØªØ¯Ø±Ø¨ÙŠÙ† (Ù…Ø¹ Ø§Ù„Ø¨Ø­Ø« Ø¨ÙƒÙˆØ¯ Ø§Ù„Ù…ØªØ¯Ø±Ø¨ Ø£Ùˆ Ø§Ù„Ø§Ø³Ù…)
 final traineesProvider =
     FutureProvider.family<List<TraineeModel>, String?>((ref, search) async {
   final repo = ref.watch(traineesRepositoryProvider);
   return repo.getTrainees(search: search);
 });
 
-/// الملف الشخصي
+/// Ø§Ù„Ù…Ù„Ù Ø§Ù„Ø´Ø®ØµÙŠ
 final traineeProfileProvider =
     FutureProvider.family<Map<String, dynamic>, String>((ref, traineeId) {
   return ref.watch(traineesRepositoryProvider).getTraineeProfile(traineeId);
 });
 
-/// بيانات متدرب حسب المعرف
+/// Ø¨ÙŠØ§Ù†Ø§Øª Ù…ØªØ¯Ø±Ø¨ Ø­Ø³Ø¨ Ø§Ù„Ù…Ø¹Ø±Ù
 final traineeByIdProvider =
     FutureProvider.family<TraineeModel?, String>((ref, id) {
   return ref.watch(traineesRepositoryProvider).getTraineeById(id);

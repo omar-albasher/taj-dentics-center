@@ -56,7 +56,8 @@ class PaymentsRepository {
       query = query.eq('method', method);
     }
 
-    final response = await query.order('paid_at', ascending: false).limit(100);
+    final limit = (search != null && search.trim().isNotEmpty) ? 1000 : 100;
+    final response = await query.order('paid_at', ascending: false).limit(limit);
     final list = List<Map<String, dynamic>>.from(response);
 
     if (search != null && search.trim().isNotEmpty) {

@@ -227,7 +227,7 @@ class _RecentPaymentsTabState extends ConsumerState<_RecentPaymentsTab> {
                           color: AppColors.error, fontFamily: 'Cairo')),
                   const SizedBox(height: 12),
                   ElevatedButton(
-                    onPressed: () => ref.invalidate(recentPaymentsProvider),
+                    onPressed: () => ref.invalidate(recentPaymentsProvider(params)),
                     child: const Text('إعادة المحاولة',
                         style: TextStyle(fontFamily: 'Cairo')),
                   ),
