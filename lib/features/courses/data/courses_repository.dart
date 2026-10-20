@@ -99,6 +99,20 @@ class CoursesRepository {
     return List<Map<String, dynamic>>.from(response);
   }
 
+  Future<Map<String, dynamic>> shiftCohortSessions({
+    required String cohortId,
+    required DateTime newStartDate,
+  }) async {
+    final response = await _client.rpc(
+      'shift_cohort_sessions',
+      params: {
+        'p_cohort_id': cohortId,
+        'p_new_start_date': newStartDate.toIso8601String(),
+      },
+    );
+    return Map<String, dynamic>.from(response as Map);
+  }
+
   Future<CourseModel?> getCourseById(String id) async {
     final response = await _client
         .from('courses')

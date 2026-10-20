@@ -846,3 +846,294 @@ class _EnrollTraineeDialogState extends ConsumerState<_EnrollTraineeDialog> {
     );
   }
 }
+
+
+// ─── Shift Cohort Sessions Dialog (Phase 7) ──────────────────────────────────
+class _ShiftCohortSessionsDialog extends ConsumerStatefulWidget {
+  final CohortModel cohort;
+  final VoidCallback onShifted;
+
+  const _ShiftCohortSessionsDialog({
+    required this.cohort,
+    required this.onShifted,
+  });
+
+  @override
+  ConsumerState<_ShiftCohortSessionsDialog> createState() =>
+      _ShiftCohortSessionsDialogState();
+}
+
+class _ShiftCohortSessionsDialogState
+    extends ConsumerState<_ShiftCohortSessionsDialog> {
+  DateTime _newDate = DateTime.now().add(const Duration(days: 7));
+  TimeOfDay _newTime = const TimeOfDay(hour: 16, minute: 0);
+  bool _loading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.cohort.startsAt != null) {
+      _newDate = widget.cohort.startsAt!;
+      _newTime = TimeOfDay.fromDateTime(widget.cohort.startsAt!);
+    }
+  }
+
+  Future<void> _pickDate() async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _newDate,
+      firstDate: DateTime.now().subtract(const Duration(days: 1)),
+      lastDate: DateTime.now().add(const Duration(days: 365)),
+      builder: (context, child) {
+        return Theme(
+          data: ThemeData.dark().copyWith(
+            colorScheme: const ColorScheme.dark(
+              primary: AppColors.gold,
+              onPrimary: Colors.black,
+              surface: AppColors.cardBg,
+              onSurface: AppColors.textPrimary,
+            ),
+          ),
+          child: child!,
+        );
+      },
+    );
+    if (picked != null) {
+      setState(() => _newDate = picked);
+    }
+  }
+
+  Future<void> _pickTime() async {
+    final picked = await showTimePicker(
+      context: context,
+      initialTime: _newTime,
+      builder: (context, child) {
+        return Theme(
+          data: ThemeData.dark().copyWith(
+            colorScheme: const ColorScheme.dark(
+              primary: AppColors.gold,
+              onPrimary: Colors.black,
+              surface: AppColors.cardBg,
+              onSurface: AppColors.textPrimary,
+            ),
+          ),
+          child: child!,
+        );
+      },
+    );
+    if (picked != null) {
+      setState(() => _newTime = picked);
+    }
+  }
+
+  Future<void> _submit() async {
+    final combinedDateTime = DateTime(
+      _newDate.year,
+      _newDate.month,
+      _newDate.day,
+      _newTime.hour,
+      _newTime.minute,
+    );
+
+    setState(() => _loading = true);
+    try {
+      final res = await ref.read(coursesRepositoryProvider).shiftCohortSessions(
+            cohortId: widget.cohort.id,
+            newStartDate: combinedDateTime,
+          );
+
+      if (!mounted) return;
+
+      if (res['success'] == true) {
+        Navigator.pop(context);
+        widget.onShifted();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(res['message']?.toString() ?? 'تمت إزاحة الجلسات بنجاح ✓',
+                style: const TextStyle(fontFamily: 'Cairo')),
+            backgroundColor: AppColors.success,
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(res['message']?.toString() ?? 'تعذر إزاحة الجلسات',
+                style: const TextStyle(fontFamily: 'Cairo')),
+            backgroundColor: AppColors.error,
+          ),
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(AppErrorHandler.friendlyMessage(e),
+              style: const TextStyle(fontFamily: 'Cairo')),
+          backgroundColor: AppColors.error,
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final timeStr = '${_newTime.hour.toString().padLeft(2, '0')}:${_newTime.minute.toString().padLeft(2, '0')}';
+    final dateStr = AppFormatters.dateOnly.format(_newDate);
+
+    return Dialog(
+      backgroundColor: AppColors.cardBg,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 480),
+        child: Padding(
+          padding: EdgeInsets.all(Responsive.spacing(context, 24)),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  const Icon(Icons.edit_calendar, color: AppColors.gold),
+                  SizedBox(width: Responsive.spacing(context, 8)),
+                  Expanded(
+                    child: Text(
+                      'إزاحة مواعيد الجلسات — ${widget.cohort.name}',
+                      style: TextStyle(
+                        fontSize: Responsive.fontSize(context, 16),
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.gold,
+                        fontFamily: 'Cairo',
+                      ),
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close, color: AppColors.textSecondary),
+                    onPressed: () => Navigator.pop(context),
+                  ),
+                ],
+              ),
+              const Divider(color: AppColors.divider),
+              SizedBox(height: Responsive.spacing(context, 12)),
+
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: AppColors.warning.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: AppColors.warning.withValues(alpha: 0.3)),
+                ),
+                child: const Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(Icons.info_outline, color: AppColors.warning, size: 20),
+                    SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'سيتم حساب الفارق الزمني وإزاحة جميع الجلسات المجدولة تلقائياً مع الحفاظ على الفواصل الأصلية. الجلسات المنفذة أو المفتوحة لن تتأثر.',
+                        style: TextStyle(
+                          color: AppColors.textPrimary,
+                          fontSize: 12,
+                          fontFamily: 'Cairo',
+                          height: 1.4,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              SizedBox(height: Responsive.spacing(context, 16)),
+
+              Text(
+                'تاريخ ووقت البداية الجديد للجلسات المجدولة:',
+                style: TextStyle(
+                  fontSize: Responsive.fontSize(context, 13),
+                  color: AppColors.textSecondary,
+                  fontFamily: 'Cairo',
+                ),
+              ),
+              SizedBox(height: Responsive.spacing(context, 8)),
+
+              Row(
+                children: [
+                  Expanded(
+                    child: InkWell(
+                      onTap: _pickDate,
+                      borderRadius: BorderRadius.circular(12),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                        decoration: BoxDecoration(
+                          color: AppColors.surface,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: AppColors.divider),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.calendar_today, size: 16, color: AppColors.gold),
+                            const SizedBox(width: 8),
+                            Text(dateStr, style: const TextStyle(color: AppColors.textPrimary, fontFamily: 'Cairo')),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                  SizedBox(width: Responsive.spacing(context, 8)),
+                  Expanded(
+                    child: InkWell(
+                      onTap: _pickTime,
+                      borderRadius: BorderRadius.circular(12),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                        decoration: BoxDecoration(
+                          color: AppColors.surface,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: AppColors.divider),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.access_time, size: 16, color: AppColors.gold),
+                            const SizedBox(width: 8),
+                            Text(timeStr, style: const TextStyle(color: AppColors.textPrimary, fontFamily: 'Cairo')),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              SizedBox(height: Responsive.spacing(context, 24)),
+
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () => Navigator.pop(context),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: AppColors.textSecondary,
+                        side: const BorderSide(color: AppColors.divider),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                      ),
+                      child: const Text('إلغاء', style: TextStyle(fontFamily: 'Cairo')),
+                    ),
+                  ),
+                  SizedBox(width: Responsive.spacing(context, 12)),
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed: _loading ? null : _submit,
+                      icon: _loading ? const SizedBox.shrink() : const Icon(Icons.check, size: 18),
+                      label: _loading
+                          ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(color: Colors.black, strokeWidth: 2))
+                          : const Text('تطبيق الإزاحة', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold)),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
