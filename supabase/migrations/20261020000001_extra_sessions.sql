@@ -73,7 +73,7 @@ SELECT
     co.total_sessions,
     count(a.id) AS sessions_attended,
     -- حماية القاع: المتبقي لا يمكن أن يقل عن صفر أبداً
-    GREATEST(0, co.total_sessions - count(a.id))::integer AS sessions_remaining,
+    GREATEST(0::bigint, co.total_sessions - count(a.id)) AS sessions_remaining,
     -- حماية السقف: النسبة لا يمكن أن تتجاوز 100% أبداً
     LEAST(100, round(count(a.id)::numeric * 100.0 / NULLIF(co.total_sessions, 0)::numeric)) AS attendance_percentage,
     -- أعمدة تفصيلية داعمة للميزات المتقدمة دون كسر التوافق
