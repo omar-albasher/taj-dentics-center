@@ -9,6 +9,7 @@ class AdminSessionModel {
   final String? qrToken;
   final DateTime? openedAt;
   final DateTime? closedAt;
+  final bool isExtra;
 
   const AdminSessionModel({
     required this.id,
@@ -21,6 +22,7 @@ class AdminSessionModel {
     this.qrToken,
     this.openedAt,
     this.closedAt,
+    this.isExtra = false,
   });
 
   factory AdminSessionModel.fromMap(Map<String, dynamic> map) {
@@ -40,6 +42,7 @@ class AdminSessionModel {
           map['opened_at'] != null ? DateTime.tryParse(map['opened_at']) : null,
       closedAt:
           map['closed_at'] != null ? DateTime.tryParse(map['closed_at']) : null,
+      isExtra: map['is_extra'] == true,
     );
   }
 

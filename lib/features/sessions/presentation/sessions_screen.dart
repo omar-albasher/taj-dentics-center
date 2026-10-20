@@ -234,12 +234,38 @@ class _SessionCardState extends ConsumerState<_SessionCard> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(widget.session.courseName,
-                        style: TextStyle(
-                            fontSize: Responsive.fontSize(context, 15),
-                            fontWeight: FontWeight.w700,
-                            color: AppColors.textPrimary,
-                            fontFamily: 'Cairo')),
+                    Row(
+                      children: [
+                        Text(widget.session.courseName,
+                            style: TextStyle(
+                                fontSize: Responsive.fontSize(context, 15),
+                                fontWeight: FontWeight.w700,
+                                color: AppColors.textPrimary,
+                                fontFamily: 'Cairo')),
+                        if (widget.session.isExtra) ...[
+                          const SizedBox(width: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: Colors.amber.withValues(alpha: 0.15),
+                              borderRadius: BorderRadius.circular(6),
+                              border: Border.all(
+                                  color: Colors.amber.withValues(alpha: 0.4)),
+                            ),
+                            child: const Text(
+                              'إضافية',
+                              style: TextStyle(
+                                color: Colors.amber,
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                                fontFamily: 'Cairo',
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
                     Text(widget.session.cohortName,
                         style: TextStyle(
                             fontSize: Responsive.fontSize(context, 12),
@@ -565,6 +591,7 @@ class _CreateSessionDialogState extends ConsumerState<_CreateSessionDialog> {
   String? _selectedCohortId;
   final _sessionNumberCtrl = TextEditingController();
   DateTime _scheduledAt = DateTime.now();
+  bool _isExtra = false;
   bool _loading = false;
 
   @override
@@ -590,6 +617,7 @@ class _CreateSessionDialogState extends ConsumerState<_CreateSessionDialog> {
             cohortId: _selectedCohortId!,
             sessionNumber: int.parse(_sessionNumberCtrl.text),
             scheduledAt: _scheduledAt,
+            isExtra: _isExtra,
           );
 
       if (!mounted) return;
@@ -733,6 +761,32 @@ class _CreateSessionDialogState extends ConsumerState<_CreateSessionDialog> {
                     ],
                   ),
                 ),
+              ),
+
+              SizedBox(height: Responsive.spacing(context, 12)),
+
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text(
+                  'جلسة إضافية (مراجعة / تعويضية)',
+                  style: TextStyle(
+                    fontFamily: 'Cairo',
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.textPrimary,
+                    fontSize: 14,
+                  ),
+                ),
+                subtitle: const Text(
+                  'لا تؤثر سلباً على نسبة حضور المتدربين وتُحسب كتعويض إضافي',
+                  style: TextStyle(
+                    fontFamily: 'Cairo',
+                    fontSize: 12,
+                    color: AppColors.textSecondary,
+                  ),
+                ),
+                value: _isExtra,
+                onChanged: (v) => setState(() => _isExtra = v),
+                activeThumbColor: AppColors.gold,
               ),
 
               SizedBox(height: Responsive.spacing(context, 24)),

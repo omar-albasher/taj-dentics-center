@@ -23,11 +23,13 @@ class AdminSessionsRepository {
     required String cohortId,
     required int sessionNumber,
     required DateTime scheduledAt,
+    bool isExtra = false,
   }) async {
     await _client.from('sessions').insert({
       'cohort_id': cohortId,
       'session_number': sessionNumber,
       'scheduled_at': scheduledAt.toIso8601String(),
+      'is_extra': isExtra,
     });
   }
 
