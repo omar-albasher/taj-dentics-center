@@ -24,27 +24,39 @@ class AdminSessionsRepository {
     required int sessionNumber,
     required DateTime scheduledAt,
     bool isExtra = false,
+    String? title,
+    String? description,
+    int durationMinutes = 120,
   }) async {
     await _client.from('sessions').insert({
       'cohort_id': cohortId,
       'session_number': sessionNumber,
       'scheduled_at': scheduledAt.toUtc().toIso8601String(),
       'is_extra': isExtra,
+      if (title != null && title.isNotEmpty) 'title': title,
+      if (description != null && description.isNotEmpty) 'description': description,
+      'duration_minutes': durationMinutes,
     });
   }
 
   Future<void> openSession(String sessionId) async {
-    final qrToken = _generateUuid();
-    await _client
-        .from('sessions')
-        .update({
-          'status': 'open',
-          'qr_token': qrToken,
-          'opened_at': DateTime.now().toUtc().toIso8601String(),
-          'opened_by': _client.auth.currentUser!.id,
-        })
-        .eq('id', sessionId)
-        .eq('status', 'scheduled');
+    try {
+      // استدعاء RPC السيرفر الذرية والآمنة
+      await _client.rpc('open_session', params: {'p_session_id': sessionId});
+    } catch (_) {
+      // احتياطي مباشر في حال عدم تفعيل الـ RPC بعد
+      final qrToken = _generateUuid();
+      await _client
+          .from('sessions')
+          .update({
+            'status': 'open',
+            'qr_token': qrToken,
+            'opened_at': DateTime.now().toUtc().toIso8601String(),
+            'opened_by': _client.auth.currentUser!.id,
+          })
+          .eq('id', sessionId)
+          .eq('status', 'scheduled');
+    }
   }
 
   Future<void> closeSession(String sessionId) async {
@@ -57,6 +69,35 @@ class AdminSessionsRepository {
         })
         .eq('id', sessionId)
         .eq('status', 'open');
+  }
+
+  Future<Map<String, dynamic>> bulkScheduleSessions({
+    required String cohortId,
+    required DateTime startDate,
+    required String startTime,
+    required List<int> daysOfWeek,
+    required int sessionCount,
+    int durationMinutes = 120,
+  }) async {
+    final response = await _client.rpc('bulk_schedule_sessions', params: {
+      'p_cohort_id': cohortId,
+      'p_start_date': startDate.toIso8601String().split('T')[0],
+      'p_start_time': startTime,
+      'p_days_of_week': daysOfWeek,
+      'p_session_count': sessionCount,
+      'p_duration_minutes': durationMinutes,
+    });
+    return Map<String, dynamic>.from(response);
+  }
+
+  Future<Map<String, dynamic>?> getLatestCronLog() async {
+    final response = await _client
+        .from('cron_job_log')
+        .select()
+        .order('executed_at', ascending: false)
+        .limit(1)
+        .maybeSingle();
+    return response;
   }
 
   Future<List<Map<String, dynamic>>> getSessionAttendance(
@@ -81,6 +122,10 @@ final adminSessionsRepositoryProvider =
 
 final adminSessionsProvider = FutureProvider<List<AdminSessionModel>>((ref) {
   return ref.watch(adminSessionsRepositoryProvider).getSessions();
+});
+
+final latestCronLogProvider = FutureProvider<Map<String, dynamic>?>((ref) {
+  return ref.watch(adminSessionsRepositoryProvider).getLatestCronLog();
 });
 
 final sessionAttendanceProvider =

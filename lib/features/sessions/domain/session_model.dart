@@ -10,6 +10,9 @@ class AdminSessionModel {
   final DateTime? openedAt;
   final DateTime? closedAt;
   final bool isExtra;
+  final String? title;
+  final String? description;
+  final int durationMinutes;
 
   const AdminSessionModel({
     required this.id,
@@ -23,6 +26,9 @@ class AdminSessionModel {
     this.openedAt,
     this.closedAt,
     this.isExtra = false,
+    this.title,
+    this.description,
+    this.durationMinutes = 120,
   });
 
   factory AdminSessionModel.fromMap(Map<String, dynamic> map) {
@@ -43,10 +49,14 @@ class AdminSessionModel {
       closedAt:
           map['closed_at'] != null ? DateTime.tryParse(map['closed_at'])?.toLocal() : null,
       isExtra: map['is_extra'] == true,
+      title: map['title'] as String?,
+      description: map['description'] as String?,
+      durationMinutes: (map['duration_minutes'] as num?)?.toInt() ?? 120,
     );
   }
 
   bool get isOpen => status == 'open';
   bool get isScheduled => status == 'scheduled';
   bool get isClosed => status == 'closed';
+  bool get isMissed => status == 'missed';
 }

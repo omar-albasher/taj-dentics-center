@@ -61,7 +61,70 @@ class _SessionsScreenState extends ConsumerState<SessionsScreen>
                 ),
               ],
             ),
-            SizedBox(height: Responsive.spacing(context, 16)),
+            SizedBox(height: Responsive.spacing(context, 8)),
+            // نبض الأتمتة التلقائية Heartbeat
+            Consumer(
+              builder: (context, ref, _) {
+                final cronAsync = ref.watch(latestCronLogProvider);
+                return cronAsync.when(
+                  data: (log) {
+                    final isLive = log != null && log['status'] == 'success';
+                    final executedAt = log != null
+                        ? DateTime.tryParse(log['executed_at'] ?? '')?.toLocal()
+                        : null;
+                    final diffMinutes = executedAt != null
+                        ? DateTime.now().difference(executedAt).inMinutes
+                        : null;
+
+                    return Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: isLive
+                            ? AppColors.darkGreen.withValues(alpha: 0.3)
+                            : AppColors.surface,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                          color: isLive
+                              ? AppColors.success.withValues(alpha: 0.4)
+                              : AppColors.divider,
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Container(
+                            width: 8,
+                            height: 8,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: isLive
+                                  ? AppColors.success
+                                  : AppColors.textSecondary,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            isLive
+                                ? 'الأتمتة الزمنية (pg_cron): نشطة (آخر فحص منذ ${diffMinutes ?? 0} دقيقة)'
+                                : 'الأتمتة الزمنية: بانتظار تفعيل أول تشغيل',
+                            style: TextStyle(
+                              fontSize: Responsive.fontSize(context, 11),
+                              fontFamily: 'Cairo',
+                              color: isLive
+                                  ? AppColors.success
+                                  : AppColors.textSecondary,
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                  loading: () => const SizedBox.shrink(),
+                  error: (_, __) => const SizedBox.shrink(),
+                );
+              },
+            ),
+            SizedBox(height: Responsive.spacing(context, 12)),
             TabBar(
               controller: _tabController,
               labelColor: AppColors.gold,
@@ -92,7 +155,7 @@ class _SessionsScreenState extends ConsumerState<SessionsScreen>
                       final open = sessions.where((s) => s.isOpen).toList();
                       final scheduled =
                           sessions.where((s) => s.isScheduled).toList();
-                      final closed = sessions.where((s) => s.isClosed).toList();
+                      final closed = sessions.where((s) => s.isClosed || s.isMissed).toList();
 
                       return TabBarView(
                         controller: _tabController,
@@ -195,6 +258,10 @@ class _SessionCardState extends ConsumerState<_SessionCard> {
         statusColor = AppColors.error;
         statusLabel = 'مغلقة';
         break;
+      case 'missed':
+        statusColor = AppColors.textSecondary;
+        statusLabel = 'فاتت';
+        break;
       default:
         statusColor = AppColors.warning;
         statusLabel = 'مجدولة';
@@ -234,11 +301,24 @@ class _SessionCardState extends ConsumerState<_SessionCard> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    if (widget.session.title != null &&
+                        widget.session.title!.isNotEmpty) ...[
+                      Text(
+                        widget.session.title!,
+                        style: TextStyle(
+                          fontSize: Responsive.fontSize(context, 15),
+                          fontWeight: FontWeight.w800,
+                          color: AppColors.gold,
+                          fontFamily: 'Cairo',
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                    ],
                     Row(
                       children: [
                         Text(widget.session.courseName,
                             style: TextStyle(
-                                fontSize: Responsive.fontSize(context, 15),
+                                fontSize: Responsive.fontSize(context, 14),
                                 fontWeight: FontWeight.w700,
                                 color: AppColors.textPrimary,
                                 fontFamily: 'Cairo')),
@@ -266,16 +346,54 @@ class _SessionCardState extends ConsumerState<_SessionCard> {
                         ],
                       ],
                     ),
-                    Text(widget.session.cohortName,
+                    if (widget.session.description != null &&
+                        widget.session.description!.isNotEmpty) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        widget.session.description!,
                         style: TextStyle(
-                            fontSize: Responsive.fontSize(context, 12),
-                            color: AppColors.textSecondary,
-                            fontFamily: 'Cairo')),
-                    Text(fmt.format(widget.session.scheduledAt),
-                        style: TextStyle(
-                            fontSize: Responsive.fontSize(context, 11),
-                            color: AppColors.textSecondary,
-                            fontFamily: 'Cairo')),
+                          fontSize: Responsive.fontSize(context, 12),
+                          color: AppColors.textSecondary,
+                          fontFamily: 'Cairo',
+                        ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                    const SizedBox(height: 4),
+                    Wrap(
+                      spacing: 8,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        Text(widget.session.cohortName,
+                            style: TextStyle(
+                                fontSize: Responsive.fontSize(context, 12),
+                                color: AppColors.textSecondary,
+                                fontFamily: 'Cairo')),
+                        Text('•',
+                            style: TextStyle(color: AppColors.textSecondary, fontSize: 10)),
+                        Text(fmt.format(widget.session.scheduledAt),
+                            style: TextStyle(
+                                fontSize: Responsive.fontSize(context, 11),
+                                color: AppColors.textSecondary,
+                                fontFamily: 'Cairo')),
+                        Text('•',
+                            style: TextStyle(color: AppColors.textSecondary, fontSize: 10)),
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(Icons.timer_outlined,
+                                size: 12, color: AppColors.textSecondary),
+                            const SizedBox(width: 4),
+                            Text('${widget.session.durationMinutes} دقيقة',
+                                style: TextStyle(
+                                    fontSize: Responsive.fontSize(context, 11),
+                                    color: AppColors.textSecondary,
+                                    fontFamily: 'Cairo')),
+                          ],
+                        ),
+                      ],
+                    ),
                   ],
                 ),
               ),
@@ -590,6 +708,9 @@ class _CreateSessionDialog extends ConsumerStatefulWidget {
 class _CreateSessionDialogState extends ConsumerState<_CreateSessionDialog> {
   String? _selectedCohortId;
   final _sessionNumberCtrl = TextEditingController();
+  final _titleCtrl = TextEditingController();
+  final _descriptionCtrl = TextEditingController();
+  final _durationCtrl = TextEditingController(text: '120');
   DateTime _scheduledAt = DateTime.now();
   bool _isExtra = false;
   bool _loading = false;
@@ -597,6 +718,9 @@ class _CreateSessionDialogState extends ConsumerState<_CreateSessionDialog> {
   @override
   void dispose() {
     _sessionNumberCtrl.dispose();
+    _titleCtrl.dispose();
+    _descriptionCtrl.dispose();
+    _durationCtrl.dispose();
     super.dispose();
   }
 
@@ -618,6 +742,9 @@ class _CreateSessionDialogState extends ConsumerState<_CreateSessionDialog> {
             sessionNumber: int.parse(_sessionNumberCtrl.text),
             scheduledAt: _scheduledAt,
             isExtra: _isExtra,
+            title: _titleCtrl.text.trim().isEmpty ? null : _titleCtrl.text.trim(),
+            description: _descriptionCtrl.text.trim().isEmpty ? null : _descriptionCtrl.text.trim(),
+            durationMinutes: int.tryParse(_durationCtrl.text.trim()) ?? 120,
           );
 
       if (!mounted) return;
@@ -711,6 +838,32 @@ class _CreateSessionDialogState extends ConsumerState<_CreateSessionDialog> {
                 keyboardType: TextInputType.number,
                 style: const TextStyle(color: AppColors.textPrimary),
                 decoration: _inputDecoration('رقم الجلسة *', Icons.numbers),
+              ),
+
+              SizedBox(height: Responsive.spacing(context, 12)),
+
+              TextField(
+                controller: _titleCtrl,
+                style: const TextStyle(color: AppColors.textPrimary),
+                decoration: _inputDecoration('عنوان الجلسة (اختياري)', Icons.title),
+              ),
+
+              SizedBox(height: Responsive.spacing(context, 12)),
+
+              TextField(
+                controller: _descriptionCtrl,
+                maxLines: 2,
+                style: const TextStyle(color: AppColors.textPrimary),
+                decoration: _inputDecoration('محاور ووصف الجلسة (اختياري)', Icons.description),
+              ),
+
+              SizedBox(height: Responsive.spacing(context, 12)),
+
+              TextField(
+                controller: _durationCtrl,
+                keyboardType: TextInputType.number,
+                style: const TextStyle(color: AppColors.textPrimary),
+                decoration: _inputDecoration('مدة الجلسة (بالدقائق) *', Icons.timer_outlined),
               ),
 
               SizedBox(height: Responsive.spacing(context, 12)),

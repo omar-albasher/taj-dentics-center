@@ -1,3 +1,4 @@
+import '../../sessions/data/admin_sessions_repository.dart';
 import '../../../core/utils/app_error_handler.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/router/app_router.dart';
@@ -325,6 +326,35 @@ class _CohortCard extends StatelessWidget {
               ],
             ),
           ),
+          // زر جدولة الجلسات بالجملة (المرحلة 8)
+          IconButton(
+            icon: const Icon(Icons.playlist_add, color: AppColors.gold, size: 22),
+            tooltip: 'جدولة جلسات الدفعة بالجملة',
+            onPressed: () {
+              showDialog(
+                context: context,
+                builder: (_) => _BulkScheduleSessionsDialog(
+                  cohort: cohort,
+                  course: course,
+                ),
+              );
+            },
+          ),
+          // زر ترحيل المواعيد (المرحلة 7)
+          IconButton(
+            icon: const Icon(Icons.edit_calendar, color: AppColors.textSecondary, size: 20),
+            tooltip: 'ترحيل مواعيد الجلسات',
+            onPressed: () {
+              showDialog(
+                context: context,
+                builder: (_) => _ShiftCohortSessionsDialog(
+                  cohort: cohort,
+                  onShifted: () {},
+                ),
+              );
+            },
+          ),
+          SizedBox(width: Responsive.spacing(context, 8)),
           ElevatedButton.icon(
             onPressed: onEnroll,
             icon: const Icon(Icons.person_add, size: 16),
@@ -1131,6 +1161,394 @@ class _ShiftCohortSessionsDialogState
                 ],
               ),
             ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+
+// ─── Phase 8: Bulk Schedule Sessions Dialog ───
+class _BulkScheduleSessionsDialog extends ConsumerStatefulWidget {
+  final CohortModel cohort;
+  final CourseModel course;
+
+  const _BulkScheduleSessionsDialog({
+    required this.cohort,
+    required this.course,
+  });
+
+  @override
+  ConsumerState<_BulkScheduleSessionsDialog> createState() =>
+      _BulkScheduleSessionsDialogState();
+}
+
+class _BulkScheduleSessionsDialogState
+    extends ConsumerState<_BulkScheduleSessionsDialog> {
+  late DateTime _startDate;
+  TimeOfDay _startTime = const TimeOfDay(hour: 15, minute: 0);
+  late final TextEditingController _sessionCountCtrl;
+  late final TextEditingController _durationCtrl;
+  final Set<int> _selectedDays = {6, 1, 3}; // السبت، الإثنين، الأربعاء كافتراضي
+  bool _loading = false;
+
+  final Map<int, String> _weekdaysMap = {
+    6: 'السبت',
+    0: 'الأحد',
+    1: 'الإثنين',
+    2: 'الثلاثاء',
+    3: 'الأربعاء',
+    4: 'الخميس',
+    5: 'الجمعة',
+  };
+
+  @override
+  void initState() {
+    super.initState();
+    _startDate = widget.cohort.startsAt ?? DateTime.now();
+    _sessionCountCtrl = TextEditingController(
+      text: widget.course.totalSessions.toString(),
+    );
+    _durationCtrl = TextEditingController(text: '120');
+  }
+
+  @override
+  void dispose() {
+    _sessionCountCtrl.dispose();
+    _durationCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    if (_selectedDays.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('يرجى اختيار يوم واحد على الأقل من أيام الأسبوع'),
+          backgroundColor: AppColors.error,
+        ),
+      );
+      return;
+    }
+
+    final count = int.tryParse(_sessionCountCtrl.text.trim()) ?? 0;
+    if (count <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('يرجى تحديد عدد جلسات صحيح أكبر من الصفر'),
+          backgroundColor: AppColors.error,
+        ),
+      );
+      return;
+    }
+
+    final duration = int.tryParse(_durationCtrl.text.trim()) ?? 120;
+    final timeStr = '${_startTime.hour.toString().padLeft(2, '0')}:${_startTime.minute.toString().padLeft(2, '0')}:00';
+
+    setState(() => _loading = true);
+    try {
+      final res = await ref
+          .read(adminSessionsRepositoryProvider)
+          .bulkScheduleSessions(
+            cohortId: widget.cohort.id,
+            startDate: _startDate,
+            startTime: timeStr,
+            daysOfWeek: _selectedDays.toList(),
+            sessionCount: count,
+            durationMinutes: duration,
+          );
+
+      if (!mounted) return;
+      Navigator.pop(context);
+      ref.invalidate(cohortsByCourseProvider(widget.course.id));
+      ref.invalidate(adminSessionsProvider);
+
+      final msg = res['message'] ?? 'تمت جدولة الجلسات بنجاح';
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(msg.toString()),
+          backgroundColor: AppColors.success,
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(AppErrorHandler.friendlyMessage(e)),
+          backgroundColor: AppColors.error,
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      backgroundColor: AppColors.cardBg,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 520),
+        child: Padding(
+          padding: EdgeInsets.all(Responsive.spacing(context, 24)),
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    const Icon(Icons.playlist_add, color: AppColors.gold, size: 26),
+                    SizedBox(width: Responsive.spacing(context, 8)),
+                    Expanded(
+                      child: Text(
+                        'جدولة جلسات الدفعة بالجملة',
+                        style: TextStyle(
+                          fontSize: Responsive.fontSize(context, 18),
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.gold,
+                          fontFamily: 'Cairo',
+                        ),
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.close, color: AppColors.textSecondary),
+                      onPressed: () => Navigator.pop(context),
+                    ),
+                  ],
+                ),
+                Text(
+                  'الدفعة: ${widget.cohort.name} — ${widget.course.name}',
+                  style: TextStyle(
+                    color: AppColors.textSecondary,
+                    fontSize: Responsive.fontSize(context, 13),
+                    fontFamily: 'Cairo',
+                  ),
+                ),
+                const Divider(color: AppColors.divider, height: 24),
+
+                // Start Date
+                Text('تاريخ أول جلسة:',
+                    style: const TextStyle(
+                        fontFamily: 'Cairo',
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.textPrimary)),
+                SizedBox(height: Responsive.spacing(context, 6)),
+                InkWell(
+                  onTap: () async {
+                    final d = await showDatePicker(
+                      context: context,
+                      initialDate: _startDate,
+                      firstDate: DateTime(2024),
+                      lastDate: DateTime(2030),
+                    );
+                    if (d != null && mounted) setState(() => _startDate = d);
+                  },
+                  child: Container(
+                    padding: EdgeInsets.all(Responsive.spacing(context, 12)),
+                    decoration: BoxDecoration(
+                      color: AppColors.surface,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: AppColors.divider),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.calendar_today, color: AppColors.gold, size: 18),
+                        SizedBox(width: Responsive.spacing(context, 8)),
+                        Text(AppFormatters.dateOnly.format(_startDate),
+                            style: const TextStyle(
+                                color: AppColors.textPrimary, fontFamily: 'Cairo')),
+                      ],
+                    ),
+                  ),
+                ),
+
+                SizedBox(height: Responsive.spacing(context, 14)),
+
+                // Start Time
+                Text('وقت بدء الجلسة:',
+                    style: const TextStyle(
+                        fontFamily: 'Cairo',
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.textPrimary)),
+                SizedBox(height: Responsive.spacing(context, 6)),
+                InkWell(
+                  onTap: () async {
+                    final t = await showTimePicker(
+                      context: context,
+                      initialTime: _startTime,
+                    );
+                    if (t != null && mounted) setState(() => _startTime = t);
+                  },
+                  child: Container(
+                    padding: EdgeInsets.all(Responsive.spacing(context, 12)),
+                    decoration: BoxDecoration(
+                      color: AppColors.surface,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: AppColors.divider),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.access_time, color: AppColors.gold, size: 18),
+                        SizedBox(width: Responsive.spacing(context, 8)),
+                        Text(_startTime.format(context),
+                            style: const TextStyle(
+                                color: AppColors.textPrimary, fontFamily: 'Cairo')),
+                      ],
+                    ),
+                  ),
+                ),
+
+                SizedBox(height: Responsive.spacing(context, 14)),
+
+                // Days of week
+                Text('أيام انعقاد الجلسات بالأسبوع:',
+                    style: const TextStyle(
+                        fontFamily: 'Cairo',
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.textPrimary)),
+                SizedBox(height: Responsive.spacing(context, 8)),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 6,
+                  children: _weekdaysMap.entries.map((entry) {
+                    final isSelected = _selectedDays.contains(entry.key);
+                    return FilterChip(
+                      label: Text(entry.value,
+                          style: TextStyle(
+                            fontFamily: 'Cairo',
+                            fontSize: 12,
+                            fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                            color: isSelected ? Colors.black : AppColors.textPrimary,
+                          )),
+                      selected: isSelected,
+                      selectedColor: AppColors.gold,
+                      checkmarkColor: Colors.black,
+                      backgroundColor: AppColors.surface,
+                      onSelected: (val) {
+                        setState(() {
+                          if (val) {
+                            _selectedDays.add(entry.key);
+                          } else {
+                            _selectedDays.remove(entry.key);
+                          }
+                        });
+                      },
+                    );
+                  }).toList(),
+                ),
+
+                SizedBox(height: Responsive.spacing(context, 14)),
+
+                // Session Count & Duration
+                Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text('عدد الجلسات:',
+                              style: TextStyle(
+                                  fontFamily: 'Cairo',
+                                  fontWeight: FontWeight.w600,
+                                  color: AppColors.textPrimary)),
+                          SizedBox(height: Responsive.spacing(context, 6)),
+                          TextField(
+                            controller: _sessionCountCtrl,
+                            keyboardType: TextInputType.number,
+                            style: const TextStyle(color: AppColors.textPrimary),
+                            decoration: InputDecoration(
+                              filled: true,
+                              fillColor: AppColors.surface,
+                              prefixIcon: const Icon(Icons.numbers, color: AppColors.gold, size: 18),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(10),
+                                borderSide: const BorderSide(color: AppColors.divider),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    SizedBox(width: Responsive.spacing(context, 12)),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text('المدة (بالدقائق):',
+                              style: TextStyle(
+                                  fontFamily: 'Cairo',
+                                  fontWeight: FontWeight.w600,
+                                  color: AppColors.textPrimary)),
+                          SizedBox(height: Responsive.spacing(context, 6)),
+                          TextField(
+                            controller: _durationCtrl,
+                            keyboardType: TextInputType.number,
+                            style: const TextStyle(color: AppColors.textPrimary),
+                            decoration: InputDecoration(
+                              filled: true,
+                              fillColor: AppColors.surface,
+                              prefixIcon: const Icon(Icons.timer_outlined, color: AppColors.gold, size: 18),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(10),
+                                borderSide: const BorderSide(color: AppColors.divider),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+
+                SizedBox(height: Responsive.spacing(context, 24)),
+
+                // Actions
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: () => Navigator.pop(context),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: AppColors.textSecondary,
+                          side: const BorderSide(color: AppColors.divider),
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10)),
+                        ),
+                        child: const Text('إلغاء',
+                            style: TextStyle(fontFamily: 'Cairo')),
+                      ),
+                    ),
+                    SizedBox(width: Responsive.spacing(context, 12)),
+                    Expanded(
+                      child: ElevatedButton(
+                        onPressed: _loading ? null : _submit,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.gold,
+                          foregroundColor: Colors.black,
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10)),
+                        ),
+                        child: _loading
+                            ? const SizedBox(
+                                height: 18,
+                                width: 18,
+                                child: CircularProgressIndicator(
+                                    strokeWidth: 2, color: Colors.black),
+                              )
+                            : const Text('جدولة بالجملة',
+                                style: TextStyle(
+                                    fontFamily: 'Cairo',
+                                    fontWeight: FontWeight.bold)),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
         ),
       ),
