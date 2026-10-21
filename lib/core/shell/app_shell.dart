@@ -2,38 +2,58 @@ import 'package:admin_dashboard/core/constants/app_colors.dart';
 import 'package:admin_dashboard/core/router/app_router.dart';
 import 'package:admin_dashboard/core/utils/responsive.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../../features/pin_lock/presentation/pin_lock_controller.dart';
+import '../../features/pin_lock/presentation/pin_lock_overlay.dart';
+import '../../features/pin_lock/presentation/set_pin_dialog.dart';
 
-class AppShell extends StatelessWidget {
+class AppShell extends ConsumerWidget {
   final Widget child;
   const AppShell({super.key, required this.child});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final isDesktop = Responsive.isDesktop(context);
+    final pinState = ref.watch(pinLockProvider);
 
-    return Scaffold(
-      body: Row(
+    return Listener(
+      behavior: HitTestBehavior.translucent,
+      onPointerDown: (_) =>
+          ref.read(pinLockProvider.notifier).resetInactivityTimer(),
+      onPointerMove: (_) =>
+          ref.read(pinLockProvider.notifier).resetInactivityTimer(),
+      onPointerHover: (_) =>
+          ref.read(pinLockProvider.notifier).resetInactivityTimer(),
+      child: Stack(
         children: [
-          if (isDesktop) const _SideNav(),
-          Expanded(child: child),
+          Scaffold(
+            body: Row(
+              children: [
+                if (isDesktop) const _SideNav(),
+                Expanded(child: child),
+              ],
+            ),
+            drawer: isDesktop ? null : const Drawer(child: _SideNav()),
+            appBar: isDesktop
+                ? null
+                : AppBar(
+                    backgroundColor: AppColors.darkGreen,
+                    iconTheme: const IconThemeData(color: AppColors.gold),
+                    title: Image.asset('assets/images/Untitled-1.png', height: 36),
+                    centerTitle: true,
+                  ),
+          ),
+          // قناع قفل الشاشة برمز PIN عند الخمول أو القفل اليدوي
+          if (pinState.isLocked) const PinLockOverlay(),
         ],
       ),
-      drawer: isDesktop ? null : const Drawer(child: _SideNav()),
-      appBar: isDesktop
-          ? null
-          : AppBar(
-              backgroundColor: AppColors.darkGreen,
-              iconTheme: const IconThemeData(color: AppColors.gold),
-              title: Image.asset('assets/images/Untitled-1.png', height: 36),
-              centerTitle: true,
-            ),
     );
   }
 }
 
-class _SideNav extends StatelessWidget {
+class _SideNav extends ConsumerWidget {
   const _SideNav();
 
   static const _items = [
@@ -84,8 +104,9 @@ class _SideNav extends StatelessWidget {
   ];
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final location = GoRouterState.of(context).matchedLocation;
+    final pinState = ref.watch(pinLockProvider);
 
     return Container(
       width: 220,
@@ -95,7 +116,7 @@ class _SideNav extends StatelessWidget {
           // Logo
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 24),
-            child: Image.asset('assets/images/Untitled-1.png', height: 230),
+            child: Image.asset('assets/images/Untitled-1.png', height: 160),
           ),
 
           const Divider(color: Colors.white24),
@@ -106,7 +127,8 @@ class _SideNav extends StatelessWidget {
             child: ListView(
               padding: const EdgeInsets.symmetric(horizontal: 12),
               children: _items.map((item) {
-                final isActive = location == item.path || location.startsWith("${item.path}/");
+                final isActive = location == item.path ||
+                    location.startsWith("${item.path}/");
                 return _NavTile(item: item, isActive: isActive);
               }).toList(),
             ),
@@ -114,18 +136,68 @@ class _SideNav extends StatelessWidget {
 
           const Divider(color: Colors.white24),
 
+          // قفل الشاشة اليدوي
+          ListTile(
+            dense: true,
+            leading: const Icon(Icons.lock_outline, color: AppColors.gold, size: 20),
+            title: const Text(
+              'قفل الشاشة الآن',
+              style: TextStyle(
+                color: AppColors.gold,
+                fontFamily: 'Cairo',
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            onTap: () {
+              if (!pinState.hasConfiguredPin) {
+                showDialog(
+                  context: context,
+                  builder: (_) => const SetPinDialog(),
+                );
+              } else {
+                ref.read(pinLockProvider.notifier).lockManually();
+              }
+            },
+          ),
+
+          // إعدادات رمز PIN
+          ListTile(
+            dense: true,
+            leading: const Icon(Icons.password, color: Colors.white60, size: 20),
+            title: Text(
+              pinState.hasConfiguredPin ? 'تغيير رمز PIN' : 'تعيين رمز PIN',
+              style: const TextStyle(
+                color: Colors.white70,
+                fontFamily: 'Cairo',
+                fontSize: 12,
+              ),
+            ),
+            onTap: () {
+              showDialog(
+                context: context,
+                builder: (_) => const SetPinDialog(),
+              );
+            },
+          ),
+
           // Logout
           ListTile(
-            leading: const Icon(Icons.logout, color: AppColors.gold),
+            dense: true,
+            leading: const Icon(Icons.logout, color: AppColors.error, size: 20),
             title: const Text(
               'تسجيل الخروج',
-              style: TextStyle(color: AppColors.gold, fontFamily: 'Cairo'),
+              style: TextStyle(
+                color: AppColors.error,
+                fontFamily: 'Cairo',
+                fontSize: 13,
+              ),
             ),
             onTap: () async {
               await Supabase.instance.client.auth.signOut();
             },
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 12),
         ],
       ),
     );
@@ -143,7 +215,9 @@ class _NavTile extends StatelessWidget {
     return Container(
       margin: const EdgeInsets.only(bottom: 4),
       decoration: BoxDecoration(
-        color: isActive ? AppColors.gold.withValues(alpha: 0.15) : Colors.transparent,
+        color: isActive
+            ? AppColors.gold.withValues(alpha: 0.15)
+            : Colors.transparent,
         borderRadius: BorderRadius.circular(10),
         border: isActive
             ? Border.all(color: AppColors.gold.withValues(alpha: 0.4))
@@ -164,7 +238,9 @@ class _NavTile extends StatelessWidget {
             fontWeight: isActive ? FontWeight.w700 : FontWeight.w400,
           ),
         ),
-        onTap: () { if (!isActive) context.go(item.path); },
+        onTap: () {
+          if (!isActive) context.go(item.path);
+        },
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
       ),
     );
@@ -177,4 +253,3 @@ class _NavItem {
   final String path;
   const _NavItem({required this.icon, required this.label, required this.path});
 }
-
