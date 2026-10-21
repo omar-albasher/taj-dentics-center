@@ -105,7 +105,7 @@ class PaymentsRepository {
       'receipt_number': receiptNumber,
       'external_reference': externalReference,
       'performed_by': _client.auth.currentUser!.id,
-      'paid_at': (paidAt ?? DateTime.now()).toIso8601String(),
+      'paid_at': (paidAt ?? DateTime.now()).toUtc().toIso8601String(),
     });
   }
 

@@ -35,13 +35,13 @@ class AdminSessionModel {
       courseName: course['name'] ?? '',
       sessionNumber: (map['session_number'] as num?)?.toInt() ?? 0,
       scheduledAt:
-          DateTime.tryParse(map['scheduled_at'] ?? '') ?? DateTime.now(),
+          DateTime.tryParse(map['scheduled_at'] ?? '')?.toLocal() ?? DateTime.now(),
       status: map['status'] ?? 'scheduled',
       qrToken: map['qr_token'],
       openedAt:
-          map['opened_at'] != null ? DateTime.tryParse(map['opened_at']) : null,
+          map['opened_at'] != null ? DateTime.tryParse(map['opened_at'])?.toLocal() : null,
       closedAt:
-          map['closed_at'] != null ? DateTime.tryParse(map['closed_at']) : null,
+          map['closed_at'] != null ? DateTime.tryParse(map['closed_at'])?.toLocal() : null,
       isExtra: map['is_extra'] == true,
     );
   }

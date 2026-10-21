@@ -30,7 +30,7 @@ class PaymentModel {
       amount: (map['amount'] as num?)?.toDouble() ?? 0,
       currency: map['currency'] ?? 'SYP',
       method: map['method'] ?? 'cash',
-      paidAt: DateTime.tryParse(map['paid_at'] ?? '') ?? DateTime.now(),
+      paidAt: DateTime.tryParse(map['paid_at'] ?? '')?.toLocal() ?? DateTime.now(),
       notes: map['notes'],
     );
   }

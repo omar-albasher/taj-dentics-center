@@ -25,7 +25,7 @@ class CohortModel {
       trainerId: map['trainer_id'] ?? '',
       name: map['name'] ?? '',
       startsAt:
-          map['starts_at'] != null ? DateTime.tryParse(map['starts_at']) : null,
+          map['starts_at'] != null ? DateTime.tryParse(map['starts_at'])?.toLocal() : null,
       isActive: map['is_active'] ?? true,
     );
   }

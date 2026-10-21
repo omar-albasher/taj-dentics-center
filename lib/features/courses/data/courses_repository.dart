@@ -68,7 +68,7 @@ class CoursesRepository {
       'course_id': courseId,
       'name': name,
       'trainer_id': trainerId,
-      'starts_at': startsAt?.toIso8601String(),
+      'starts_at': startsAt?.toUtc().toIso8601String(),
       'created_by': _client.auth.currentUser!.id,
     });
   }
@@ -107,7 +107,7 @@ class CoursesRepository {
       'shift_cohort_sessions',
       params: {
         'p_cohort_id': cohortId,
-        'p_new_start_date': newStartDate.toIso8601String(),
+        'p_new_start_date': newStartDate.toUtc().toIso8601String(),
       },
     );
     return Map<String, dynamic>.from(response as Map);

@@ -28,7 +28,7 @@ class AdminSessionsRepository {
     await _client.from('sessions').insert({
       'cohort_id': cohortId,
       'session_number': sessionNumber,
-      'scheduled_at': scheduledAt.toIso8601String(),
+      'scheduled_at': scheduledAt.toUtc().toIso8601String(),
       'is_extra': isExtra,
     });
   }
@@ -40,7 +40,7 @@ class AdminSessionsRepository {
         .update({
           'status': 'open',
           'qr_token': qrToken,
-          'opened_at': DateTime.now().toIso8601String(),
+          'opened_at': DateTime.now().toUtc().toIso8601String(),
           'opened_by': _client.auth.currentUser!.id,
         })
         .eq('id', sessionId)
@@ -53,7 +53,7 @@ class AdminSessionsRepository {
         .update({
           'status': 'closed',
           'qr_token': null,
-          'closed_at': DateTime.now().toIso8601String(),
+          'closed_at': DateTime.now().toUtc().toIso8601String(),
         })
         .eq('id', sessionId)
         .eq('status', 'open');
