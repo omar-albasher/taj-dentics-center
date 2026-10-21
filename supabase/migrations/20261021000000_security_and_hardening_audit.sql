@@ -91,8 +91,43 @@ REVOKE EXECUTE ON FUNCTION public.dispatch_survey_to_all FROM public, anon;
 GRANT EXECUTE ON FUNCTION public.dispatch_survey_to_all TO authenticated;
 
 
--- 3. Hardening: submit_survey_response
+-- 3. Hardening: submit_survey_response (Strict Trainee Ownership Check)
 -- ------------------------------------------------------------------------------
+CREATE OR REPLACE FUNCTION public.submit_survey_response(p_dispatch_id UUID, p_answers JSONB)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_dispatch UUID;
+BEGIN
+  -- التحقق الصارم من ملكية الاستبيان للمتدرب المستدعي (مستخرج من auth.uid())
+  SELECT sd.id INTO v_dispatch
+  FROM public.survey_dispatches sd
+  JOIN public.enrollments e ON e.id = sd.enrollment_id
+  JOIN public.trainees t ON t.id = e.trainee_id
+  WHERE sd.id = p_dispatch_id 
+    AND t.user_id = auth.uid();
+
+  IF v_dispatch IS NULL THEN
+    RAISE EXCEPTION 'غير مصرح: هذا الاستبيان غير مخصص لك أو انتهت صلاحيته';
+  END IF;
+
+  -- إدراج أو تحديث الإجابات بشكل ذري
+  INSERT INTO public.survey_responses (dispatch_id, answers)
+  VALUES (p_dispatch_id, p_answers)
+  ON CONFLICT (dispatch_id) DO UPDATE
+    SET answers = EXCLUDED.answers;
+
+  -- تحديث حالة الاستبيان إلى مجاب عليه
+  UPDATE public.survey_dispatches
+  SET status = 'answered',
+      answered_at = NOW()
+  WHERE id = p_dispatch_id;
+END;
+$$;
+
 REVOKE EXECUTE ON FUNCTION public.submit_survey_response FROM public, anon;
 GRANT EXECUTE ON FUNCTION public.submit_survey_response TO authenticated;
 
