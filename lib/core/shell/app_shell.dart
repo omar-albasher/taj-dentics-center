@@ -1,3 +1,5 @@
+import 'package:flutter/services.dart';
+import '../../features/command_palette/presentation/command_palette_dialog.dart';
 import '../utils/jwt_utils.dart';
 import 'package:admin_dashboard/core/constants/app_colors.dart';
 import 'package:admin_dashboard/core/router/app_router.dart';
@@ -30,22 +32,40 @@ class AppShell extends ConsumerWidget {
           ref.read(pinLockProvider.notifier).resetInactivityTimer(),
       child: Stack(
         children: [
-          Scaffold(
-            body: Row(
-              children: [
-                if (isDesktop) const _SideNav(),
-                Expanded(child: child),
-              ],
+          CallbackShortcuts(
+            bindings: <ShortcutActivator, VoidCallback>{
+              const SingleActivator(LogicalKeyboardKey.keyK, control: true): () =>
+                  CommandPaletteDialog.show(context),
+              const SingleActivator(LogicalKeyboardKey.keyK, meta: true): () =>
+                  CommandPaletteDialog.show(context),
+            },
+            child: Focus(
+              autofocus: true,
+              child: Scaffold(
+                body: Row(
+                  children: [
+                    if (isDesktop) const _SideNav(),
+                    Expanded(child: child),
+                  ],
+                ),
+                drawer: isDesktop ? null : const Drawer(child: _SideNav()),
+                appBar: isDesktop
+                    ? null
+                    : AppBar(
+                        backgroundColor: AppColors.darkGreen,
+                        iconTheme: const IconThemeData(color: AppColors.gold),
+                        title: Image.asset('assets/images/Untitled-1.png', height: 36),
+                        centerTitle: true,
+                        actions: [
+                          IconButton(
+                            icon: const Icon(Icons.search, color: AppColors.gold),
+                            tooltip: 'لوحة الأوامر السريعة (Ctrl+K)',
+                            onPressed: () => CommandPaletteDialog.show(context),
+                          ),
+                        ],
+                      ),
+              ),
             ),
-            drawer: isDesktop ? null : const Drawer(child: _SideNav()),
-            appBar: isDesktop
-                ? null
-                : AppBar(
-                    backgroundColor: AppColors.darkGreen,
-                    iconTheme: const IconThemeData(color: AppColors.gold),
-                    title: Image.asset('assets/images/Untitled-1.png', height: 36),
-                    centerTitle: true,
-                  ),
           ),
           // قناع قفل الشاشة برمز PIN عند الخمول أو القفل اليدوي
           if (pinState.isLocked) const PinLockOverlay(),
@@ -128,8 +148,49 @@ class _SideNav extends ConsumerWidget {
             child: Image.asset('assets/images/Untitled-1.png', height: 160),
           ),
 
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+            child: InkWell(
+              borderRadius: BorderRadius.circular(8),
+              onTap: () => CommandPaletteDialog.show(context),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                decoration: BoxDecoration(
+                  color: Colors.black.withValues(alpha: 0.25),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: AppColors.gold.withValues(alpha: 0.35)),
+                ),
+                child: const Row(
+                  children: [
+                    Icon(Icons.search, size: 16, color: AppColors.gold),
+                    SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'بحث سريع أو أمر...',
+                        style: TextStyle(
+                          fontFamily: 'Cairo',
+                          fontSize: 12,
+                          color: AppColors.textSecondary,
+                        ),
+                      ),
+                    ),
+                    Text(
+                      'Ctrl K',
+                      style: TextStyle(
+                        fontFamily: 'Cairo',
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.gold,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 4),
           const Divider(color: Colors.white24),
-          const SizedBox(height: 8),
+          const SizedBox(height: 4),
 
           // Nav Items
           Expanded(
