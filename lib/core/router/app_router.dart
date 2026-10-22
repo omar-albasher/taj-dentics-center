@@ -1,3 +1,4 @@
+import '../../features/dental_lab/presentation/dental_lab_screen.dart';
 import '../../features/courses/presentation/course_detail_screen.dart';
 import '../../features/courses/domain/course_model.dart';
 import 'package:admin_dashboard/core/shell/app_shell.dart';
@@ -35,6 +36,7 @@ class AppRouter {
   static const sessions = '/sessions';
   static const payments = '/payments';
   static const expenses = '/expenses';
+  static const dentalLab = '/dental-lab';
   static const reports = '/reports';
   static const surveys = '/surveys';
   static const calendar = '/calendar';
@@ -86,6 +88,7 @@ class AppRouter {
           GoRoute(path: sessions, builder: (_, __) => const SessionsScreen()),
           GoRoute(path: payments, builder: (_, __) => const PaymentsScreen()),
           GoRoute(path: expenses, builder: (_, __) => const ExpensesScreen()),
+          GoRoute(path: dentalLab, builder: (_, __) => const DentalLabScreen()),
           GoRoute(path: reports, builder: (_, __) => const ReportsScreen()),
           GoRoute(path: surveys, builder: (_, __) => const SurveysScreen()),
           GoRoute(path: calendar, builder: (_, __) => const CalendarScreen()),
@@ -118,6 +121,10 @@ class AppRouter {
     if (kDebugMode) {
       debugPrint(
           '[Router] path=${state.matchedLocation} role="$role" authorized=$isAuthorized');
+    }
+
+    if (state.matchedLocation.startsWith(dentalLab) && role != 'admin') {
+      return dashboard;
     }
 
     if (!isAuthorized) {

@@ -1,3 +1,4 @@
+import '../utils/jwt_utils.dart';
 import 'package:admin_dashboard/core/constants/app_colors.dart';
 import 'package:admin_dashboard/core/router/app_router.dart';
 import 'package:admin_dashboard/core/utils/responsive.dart';
@@ -17,6 +18,7 @@ class AppShell extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final isDesktop = Responsive.isDesktop(context);
     final pinState = ref.watch(pinLockProvider);
+
 
     return Listener(
       behavior: HitTestBehavior.translucent,
@@ -82,6 +84,10 @@ class _SideNav extends ConsumerWidget {
         label: 'المصاريف',
         path: AppRouter.expenses),
     _NavItem(
+        icon: Icons.biotech_outlined,
+        label: 'المخبر',
+        path: AppRouter.dentalLab),
+    _NavItem(
         icon: Icons.bar_chart_outlined,
         label: 'التقارير',
         path: AppRouter.reports),
@@ -107,6 +113,9 @@ class _SideNav extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final location = GoRouterState.of(context).matchedLocation;
     final pinState = ref.watch(pinLockProvider);
+    final token = Supabase.instance.client.auth.currentSession?.accessToken;
+    final role = JwtUtils.extractRole(token);
+    final isAdmin = role == 'admin';
 
     return Container(
       width: 220,
@@ -126,7 +135,10 @@ class _SideNav extends ConsumerWidget {
           Expanded(
             child: ListView(
               padding: const EdgeInsets.symmetric(horizontal: 12),
-              children: _items.map((item) {
+              children: _items.where((item) {
+                if (item.path == AppRouter.dentalLab && !isAdmin) return false;
+                return true;
+              }).map((item) {
                 final isActive = location == item.path ||
                     location.startsWith("${item.path}/");
                 return _NavTile(item: item, isActive: isActive);
