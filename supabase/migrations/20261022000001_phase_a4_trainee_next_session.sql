@@ -4,7 +4,7 @@
 -- ==============================================================================
 
 -- Create or update the trainee_next_sessions view.
--- Strictly filters sessions by the authenticated trainee's active enrollments.
+-- Strictly filters sessions by the authenticated trainee's enrollments.
 -- Excludes past/completed sessions and includes currently open or upcoming scheduled sessions.
 -- Provides fallback columns (course_name, cohort_name, is_attended).
 
@@ -35,7 +35,6 @@ JOIN public.trainees t ON t.id = e.trainee_id
 LEFT JOIN public.attendance a ON a.session_id = s.id AND a.trainee_id = t.id
 WHERE s.status IN ('scheduled', 'open')
   AND (s.scheduled_at >= (now() - interval '4 hours') OR s.status = 'open')
-  AND e.status = 'active'
   AND (
     t.user_id = auth.uid()
     OR auth.role() = 'service_role'
