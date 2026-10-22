@@ -1,3 +1,7 @@
+import 'package:supabase_flutter/supabase_flutter.dart';
+import '../../../core/utils/jwt_utils.dart';
+import '../data/monthly_target_repository.dart';
+import 'widgets/monthly_target_card.dart';
 import '../../../core/utils/app_error_handler.dart';
 import 'package:admin_dashboard/core/constants/app_colors.dart';
 import 'package:admin_dashboard/core/utils/responsive.dart';
@@ -16,6 +20,9 @@ class DashboardScreen extends ConsumerWidget {
     final kpisAsync = ref.watch(kpisProvider);
     final overdueAsync = ref.watch(overdueProvider);
     final isDesktop = Responsive.isDesktop(context);
+    final token = Supabase.instance.client.auth.currentSession?.accessToken;
+    final role = JwtUtils.extractRole(token);
+    final isAdmin = role == 'admin';
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -56,6 +63,9 @@ class DashboardScreen extends ConsumerWidget {
                   onPressed: () {
                     ref.invalidate(kpisProvider);
                     ref.invalidate(overdueProvider);
+                    if (isAdmin) {
+                      ref.invalidate(monthlyTargetProgressProvider);
+                    }
                   },
                 ),
               ],
@@ -125,6 +135,11 @@ class DashboardScreen extends ConsumerWidget {
                 );
               },
             ),
+
+            if (isAdmin) ...[
+              SizedBox(height: Responsive.spacing(context, 24)),
+              const MonthlyTargetCard(),
+            ],
 
             SizedBox(height: Responsive.spacing(context, 24)),
 

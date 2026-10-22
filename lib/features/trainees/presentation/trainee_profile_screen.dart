@@ -1,3 +1,6 @@
+import '../../whatsapp/domain/whatsapp_template_type.dart';
+import '../../whatsapp/presentation/whatsapp_template_dialog.dart';
+import '../../../core/utils/phone_utils.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -100,6 +103,19 @@ class TraineeProfileScreen extends ConsumerWidget {
           onPressed: () => context.pop(),
         ),
         actions: [
+          if (trainee.whatsappNumber != null && PhoneUtils.sanitizePhone(trainee.whatsappNumber) != null)
+            IconButton(
+              tooltip: 'مراسلة عبر واتساب',
+              icon: const Icon(Icons.chat_outlined, color: Color(0xFF25D366)),
+              onPressed: () {
+                WhatsAppTemplateDialog.show(
+                  context,
+                  traineeName: traineeName,
+                  whatsappNumber: trainee.whatsappNumber,
+                  initialType: WhatsAppTemplateType.custom,
+                );
+              },
+            ),
           IconButton(
             tooltip: 'تعديل البيانات',
             icon: const Icon(Icons.edit_outlined, color: AppColors.gold),
@@ -147,8 +163,12 @@ class TraineeProfileScreen extends ConsumerWidget {
                     ),
                   _InfoRow(label: 'البريد الإلكتروني', value: trainee.email, isLtr: true),
                   _InfoRow(label: 'رقم الجوال', value: trainee.phone, isLtr: true),
-                  if (trainee.whatsapp.isNotEmpty)
-                    _InfoRow(label: 'رقم الواتساب', value: trainee.whatsapp, isLtr: true),
+                  if (trainee.whatsappNumber != null && trainee.whatsappNumber!.isNotEmpty)
+                    _InfoRow(
+                      label: 'رقم الواتساب',
+                      value: trainee.whatsappNumber!,
+                      isLtr: true,
+                    ),
                   if (trainee.province.isNotEmpty)
                     _InfoRow(label: 'المحافظة', value: trainee.province),
                   if (trainee.address.isNotEmpty)

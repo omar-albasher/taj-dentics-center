@@ -1,9 +1,11 @@
+import '../../whatsapp/domain/whatsapp_template_type.dart';
+import '../../whatsapp/presentation/whatsapp_template_dialog.dart';
+import '../../../core/utils/phone_utils.dart';
 import '../../../core/utils/app_error_handler.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/utils/app_formatters.dart';
-import 'package:url_launcher/url_launcher.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/utils/responsive.dart';
 import '../data/payments_repository.dart';
@@ -327,6 +329,61 @@ class _RecentPaymentsTabState extends ConsumerState<_RecentPaymentsTab> {
                                   fontSize: Responsive.fontSize(context, 12),
                                   color: AppColors.textSecondary,
                                   fontFamily: 'Cairo'),
+                            ),
+                            Builder(
+                              builder: (ctx) {
+                                final rawWa = (trainee['whatsapp_number'] as String?)?.trim();
+                                if (rawWa == null || PhoneUtils.sanitizePhone(rawWa) == null) {
+                                  return const SizedBox.shrink();
+                                }
+                                return InkWell(
+                                  onTap: () async {
+                                    final enrollmentId = enrollment['id'] as String?;
+                                    num? remBalance;
+                                    if (enrollmentId != null) {
+                                      final summary = await ref
+                                          .read(paymentsRepositoryProvider)
+                                          .getEnrollmentFinancialSummary(enrollmentId);
+                                      remBalance = summary?['balance'] as num?;
+                                    }
+                                    if (ctx.mounted) {
+                                      WhatsAppTemplateDialog.show(
+                                        ctx,
+                                        traineeName: name,
+                                        whatsappNumber: rawWa,
+                                        courseName: courseName,
+                                        amount: amount,
+                                        receiptNumber: p['receipt_number'] as String?,
+                                        balance: remBalance,
+                                        currency: currency == 'USD' ? r'$' : 'ل.س',
+                                        initialType: WhatsAppTemplateType.paymentReceipt,
+                                      );
+                                    }
+                                  },
+                                  borderRadius: BorderRadius.circular(8),
+                                  child: Container(
+                                    margin: const EdgeInsets.only(top: 4),
+                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFF25D366).withValues(alpha: 0.15),
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    child: const Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(Icons.receipt, color: Color(0xFF25D366), size: 13),
+                                        SizedBox(width: 4),
+                                        Text('إشعار واتساب',
+                                            style: TextStyle(
+                                                color: Color(0xFF25D366),
+                                                fontSize: 11,
+                                                fontFamily: 'Cairo',
+                                                fontWeight: FontWeight.w700)),
+                                      ],
+                                    ),
+                                  ),
+                                );
+                              },
                             ),
                           ],
                         ),
@@ -653,7 +710,8 @@ class _OverdueTabState extends ConsumerState<_OverdueTab> {
                 itemBuilder: (context, index) {
                   final e = list[index];
                   final balance = (e['balance_due'] as num?)?.toDouble() ?? 0;
-                  final phone = e['phone'] ?? '';
+                  final whatsappNumber = (e['whatsapp_number'] as String?)?.trim();
+                  final isValidWa = PhoneUtils.sanitizePhone(whatsappNumber) != null;
 
                   return Container(
                     padding: EdgeInsets.all(Responsive.spacing(context, 16)),
@@ -702,23 +760,18 @@ class _OverdueTabState extends ConsumerState<_OverdueTab> {
                                   color: AppColors.error,
                                   fontFamily: 'Cairo'),
                             ),
-                            if (phone.isNotEmpty)
+                            if (isValidWa)
                               GestureDetector(
-                                onTap: () async {
-                                  String formattedPhone =
-                                      phone.replaceAll(RegExp(r'[^0-9]'), '');
-                                  if (formattedPhone.startsWith('09')) {
-                                    formattedPhone =
-                                        '963${formattedPhone.substring(1)}';
-                                  } else if (formattedPhone.startsWith('9') &&
-                                      formattedPhone.length == 9) {
-                                    formattedPhone = '963$formattedPhone';
-                                  }
-                                  final url =
-                                      Uri.parse('https://wa.me/$formattedPhone');
-                                  if (await canLaunchUrl(url)) {
-                                    await launchUrl(url);
-                                  }
+                                onTap: () {
+                                  WhatsAppTemplateDialog.show(
+                                    context,
+                                    traineeName: e['trainee_name'] ?? '',
+                                    whatsappNumber: whatsappNumber,
+                                    courseName: e['course_name'] ?? '',
+                                    balance: balance,
+                                    currency: (e['currency'] == 'USD') ? r'$' : 'ل.س',
+                                    initialType: WhatsAppTemplateType.paymentReminder,
+                                  );
                                 },
                                 child: Container(
                                   margin: const EdgeInsets.only(top: 4),
@@ -734,7 +787,7 @@ class _OverdueTabState extends ConsumerState<_OverdueTab> {
                                       Icon(Icons.chat,
                                           color: Color(0xFF25D366), size: 14),
                                       SizedBox(width: 4),
-                                      Text('واتساب',
+                                      Text('تذكير واتساب',
                                           style: TextStyle(
                                               color: Color(0xFF25D366),
                                               fontSize: 12,

@@ -107,6 +107,24 @@ class AdminSessionsRepository {
     return List<Map<String, dynamic>>.from(response);
   }
 
+  Future<List<Map<String, dynamic>>> getCohortTrainees(
+      String cohortId) async {
+    final response = await _client.from('enrollments').select('''
+          id,
+          status,
+          trainees!enrollments_trainee_id_fkey(
+            id,
+            trainee_code,
+            whatsapp_number,
+            users!trainees_user_id_fkey(
+              full_name,
+              phone
+            )
+          )
+        ''').eq('cohort_id', cohortId);
+    return List<Map<String, dynamic>>.from(response);
+  }
+
   String _generateUuid() {
     final bytes = List<int>.generate(16, (_) => _random.nextInt(256));
     bytes[6] = (bytes[6] & 0x0f) | 0x40;
@@ -133,4 +151,11 @@ final sessionAttendanceProvider =
   return ref
       .watch(adminSessionsRepositoryProvider)
       .getSessionAttendance(sessionId);
+});
+
+final cohortTraineesProvider =
+    FutureProvider.family<List<Map<String, dynamic>>, String>((ref, cohortId) {
+  return ref
+      .watch(adminSessionsRepositoryProvider)
+      .getCohortTrainees(cohortId);
 });

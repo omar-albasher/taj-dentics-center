@@ -4,6 +4,16 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 class PaymentsRepository {
   final _client = Supabase.instance.client;
 
+  Future<Map<String, dynamic>?> getEnrollmentFinancialSummary(
+      String enrollmentId) async {
+    final response = await _client
+        .from('enrollment_financial_summary')
+        .select()
+        .eq('enrollment_id', enrollmentId)
+        .maybeSingle();
+    return response != null ? Map<String, dynamic>.from(response) : null;
+  }
+
   Future<List<Map<String, dynamic>>> getEnrollmentsByTrainee(
       String traineeId) async {
     final response = await _client

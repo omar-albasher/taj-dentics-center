@@ -1,3 +1,8 @@
+import 'package:flutter/services.dart';
+import 'package:intl/intl.dart' hide TextDirection;
+import '../../whatsapp/domain/whatsapp_template_type.dart';
+import '../../whatsapp/presentation/whatsapp_template_dialog.dart';
+import '../../../core/utils/phone_utils.dart';
 import '../../../core/utils/app_error_handler.dart';
 import 'package:flutter/material.dart';
 import 'package:admin_dashboard/core/widgets/app_error_widget.dart';
@@ -419,7 +424,7 @@ class _SessionCardState extends ConsumerState<_SessionCard> {
           // Actions
           Row(
             children: [
-              if (widget.session.isScheduled)
+              if (widget.session.isScheduled) ...[
                 Expanded(
                   child: ElevatedButton.icon(
                     onPressed: _isLoading ? null : () => _openSession(context),
@@ -440,6 +445,18 @@ class _SessionCardState extends ConsumerState<_SessionCard> {
                     ),
                   ),
                 ),
+                SizedBox(width: Responsive.spacing(context, 8)),
+                OutlinedButton.icon(
+                  onPressed: () => _showSessionReminders(context),
+                  icon: const Icon(Icons.chat_outlined, color: Color(0xFF25D366), size: 18),
+                  label: const Text('تذكير المتدربين',
+                      style: TextStyle(fontFamily: 'Cairo', color: Color(0xFF25D366))),
+                  style: OutlinedButton.styleFrom(
+                    side: const BorderSide(color: Color(0xFF25D366)),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                ),
+              ],
               if (widget.session.isOpen) ...[
                 Expanded(
                   child: ElevatedButton.icon(
@@ -590,6 +607,13 @@ class _SessionCardState extends ConsumerState<_SessionCard> {
     showDialog(
       context: context,
       builder: (_) => _AttendanceDialog(sessionId: widget.session.id),
+    );
+  }
+
+  void _showSessionReminders(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (_) => _SessionRemindersDialog(session: widget.session),
     );
   }
 }
@@ -1002,6 +1026,225 @@ class _CreateSessionDialogState extends ConsumerState<_CreateSessionDialog> {
       focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
           borderSide: const BorderSide(color: AppColors.gold, width: 2)),
+    );
+  }
+}
+
+
+class _SessionRemindersDialog extends ConsumerWidget {
+  final AdminSessionModel session;
+  const _SessionRemindersDialog({required this.session});
+
+  void _copyAllReminders(BuildContext context) {
+    final title = (session.title != null && session.title!.trim().isNotEmpty)
+        ? session.title!.trim()
+        : 'جلسة تدريبية';
+    final dateStr = DateFormat('EEEE yyyy/MM/dd', 'ar').format(session.scheduledAt);
+    final timeStr = DateFormat('hh:mm a', 'ar').format(session.scheduledAt);
+
+    final text = 'مرحباً دكتور 🌸\n'
+        'نود تذكيركم بموعد $title لدورة ${session.courseName}\n'
+        'يوم $dateStr الساعة $timeStr.\n\n'
+        'نتمنى لكم كل التوفيق،\n'
+        'مركز تاج لطب الأسنان التدريبي';
+
+    Clipboard.setData(ClipboardData(text: text));
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('تم نسخ نص التذكير إلى الحافظة', style: TextStyle(fontFamily: 'Cairo')),
+        backgroundColor: AppColors.success,
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final traineesAsync = ref.watch(cohortTraineesProvider(session.cohortId));
+    final dateStr = DateFormat('yyyy/MM/dd - hh:mm a', 'ar').format(session.scheduledAt);
+    final sessionTitle = (session.title != null && session.title!.trim().isNotEmpty)
+        ? session.title!.trim()
+        : 'جلسة ${session.sessionNumber}';
+
+    return Dialog(
+      backgroundColor: AppColors.cardBg,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 540, maxHeight: 600),
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Header
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF25D366).withValues(alpha: 0.15),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(Icons.chat, color: Color(0xFF25D366), size: 22),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'تذكير المتدربين - $sessionTitle',
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.gold,
+                            fontFamily: 'Cairo',
+                          ),
+                        ),
+                        Text(
+                          '${session.courseName} • $dateStr',
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: AppColors.textSecondary,
+                            fontFamily: 'Cairo',
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close, color: AppColors.textSecondary),
+                    onPressed: () => Navigator.pop(context),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+
+              // Copy Template Bar
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                decoration: BoxDecoration(
+                  color: AppColors.surface,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: AppColors.divider),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.info_outline, color: AppColors.gold, size: 16),
+                    const SizedBox(width: 8),
+                    const Expanded(
+                      child: Text(
+                        'إرسال فردي لكل متدرب لتجنب حظر النوافذ المنبثقة المتعددة',
+                        style: TextStyle(fontFamily: 'Cairo', fontSize: 11, color: AppColors.textSecondary),
+                      ),
+                    ),
+                    TextButton.icon(
+                      onPressed: () => _copyAllReminders(context),
+                      icon: const Icon(Icons.copy, size: 14, color: AppColors.gold),
+                      label: const Text('نسخ القالب', style: TextStyle(fontFamily: 'Cairo', fontSize: 12, color: AppColors.gold)),
+                    ),
+                  ],
+                ),
+              ),
+              const Divider(color: AppColors.divider, height: 24),
+
+              // Trainees List
+              Expanded(
+                child: traineesAsync.when(
+                  loading: () => const Center(
+                    child: CircularProgressIndicator(color: AppColors.gold),
+                  ),
+                  error: (e, _) => Center(
+                    child: Text(AppErrorHandler.friendlyMessage(e),
+                        style: const TextStyle(color: AppColors.error, fontFamily: 'Cairo')),
+                  ),
+                  data: (list) {
+                    if (list.isEmpty) {
+                      return const Center(
+                        child: Text('لا يوجد متدربون مسجلون في هذه الدفعة',
+                            style: TextStyle(color: AppColors.textSecondary, fontFamily: 'Cairo')),
+                      );
+                    }
+
+                    return ListView.separated(
+                      itemCount: list.length,
+                      separatorBuilder: (_, __) =>
+                          const Divider(color: AppColors.divider, height: 1),
+                      itemBuilder: (context, index) {
+                        final item = list[index];
+                        final trainee = item['trainees'] as Map<String, dynamic>? ?? {};
+                        final user = trainee['users'] as Map<String, dynamic>? ?? {};
+                        final name = user['full_name'] ?? 'متدرب';
+                        final code = trainee['trainee_code'] as String?;
+                        final rawWa = (trainee['whatsapp_number'] as String?)?.trim();
+                        final isValidWa = PhoneUtils.sanitizePhone(rawWa) != null;
+
+                        return ListTile(
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                          leading: CircleAvatar(
+                            backgroundColor: AppColors.gold.withValues(alpha: 0.15),
+                            child: Text(
+                              '${index + 1}',
+                              style: const TextStyle(color: AppColors.gold, fontWeight: FontWeight.bold, fontFamily: 'Cairo'),
+                            ),
+                          ),
+                          title: Row(
+                            children: [
+                              Text(name, style: const TextStyle(color: AppColors.textPrimary, fontFamily: 'Cairo', fontWeight: FontWeight.w700, fontSize: 14)),
+                              if (code != null) ...[
+                                const SizedBox(width: 8),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: AppColors.surface,
+                                    borderRadius: BorderRadius.circular(4),
+                                    border: Border.all(color: AppColors.divider),
+                                  ),
+                                  child: Text(code, style: const TextStyle(color: AppColors.gold, fontSize: 11, fontFamily: 'Cairo')),
+                                ),
+                              ],
+                            ],
+                          ),
+                          subtitle: Text(
+                            isValidWa ? 'واتساب: +${PhoneUtils.sanitizePhone(rawWa)}' : 'لا يوجد رقم واتساب',
+                            style: TextStyle(
+                              color: isValidWa ? AppColors.textSecondary : AppColors.error.withValues(alpha: 0.7),
+                              fontFamily: 'Cairo',
+                              fontSize: 12,
+                            ),
+                            textDirection: isValidWa ? TextDirection.ltr : TextDirection.rtl,
+                          ),
+                          trailing: isValidWa
+                              ? ElevatedButton.icon(
+                                  onPressed: () {
+                                    WhatsAppTemplateDialog.show(
+                                      context,
+                                      traineeName: name,
+                                      whatsappNumber: rawWa,
+                                      courseName: session.courseName,
+                                      sessionTitle: sessionTitle,
+                                      sessionDate: session.scheduledAt,
+                                      initialType: WhatsAppTemplateType.sessionReminder,
+                                    );
+                                  },
+                                  icon: const Icon(Icons.chat, size: 14, color: Colors.white),
+                                  label: const Text('واتساب', style: TextStyle(fontFamily: 'Cairo', fontSize: 12, color: Colors.white)),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: const Color(0xFF25D366),
+                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                  ),
+                                )
+                              : const SizedBox.shrink(),
+                        );
+                      },
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

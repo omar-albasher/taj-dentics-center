@@ -1,4 +1,7 @@
-﻿import 'package:flutter/material.dart';
+import '../../whatsapp/domain/whatsapp_template_type.dart';
+import '../../whatsapp/presentation/whatsapp_template_dialog.dart';
+import '../../../core/utils/phone_utils.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:admin_dashboard/core/widgets/app_error_widget.dart';
@@ -269,6 +272,21 @@ class _TraineeCard extends StatelessWidget {
                 ],
               ),
             ),
+            if (trainee.whatsappNumber != null && PhoneUtils.sanitizePhone(trainee.whatsappNumber) != null) ...[
+              IconButton(
+                tooltip: 'واتساب',
+                icon: const Icon(Icons.chat_outlined, color: Color(0xFF25D366), size: 20),
+                onPressed: () {
+                  WhatsAppTemplateDialog.show(
+                    context,
+                    traineeName: displayName,
+                    whatsappNumber: trainee.whatsappNumber,
+                    initialType: WhatsAppTemplateType.custom,
+                  );
+                },
+              ),
+              SizedBox(width: Responsive.spacing(context, 4)),
+            ],
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
               decoration: BoxDecoration(
