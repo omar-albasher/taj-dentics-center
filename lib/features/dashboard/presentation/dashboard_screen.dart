@@ -1,3 +1,4 @@
+import '../../backup/presentation/export_data_dialog.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../core/utils/jwt_utils.dart';
 import '../data/monthly_target_repository.dart';
@@ -58,6 +59,34 @@ class DashboardScreen extends ConsumerWidget {
                   ],
                 ),
                 const Spacer(),
+                if (isAdmin) ...[
+                  OutlinedButton.icon(
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: AppColors.gold,
+                      side: const BorderSide(color: AppColors.gold),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                    ),
+                    onPressed: () {
+                      showDialog(
+                        context: context,
+                        builder: (_) => const ExportDataDialog(),
+                      );
+                    },
+                    icon: const Icon(Icons.cloud_download_outlined, size: 18),
+                    label: const Text(
+                      'تصدير بيانات النظام',
+                      style: TextStyle(
+                        fontFamily: 'Cairo',
+                        fontWeight: FontWeight.w700,
+                        fontSize: 13,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                ],
                 IconButton(
                   icon: const Icon(Icons.refresh, color: AppColors.gold),
                   onPressed: () {
