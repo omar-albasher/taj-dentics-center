@@ -157,7 +157,9 @@ GRANT EXECUTE ON FUNCTION public.get_monthly_target_progress(text) TO authentica
 
 -- 2. Phase B1: Ensure overdue_payments view projects whatsapp_number
 -- ------------------------------------------------------------------------------
-CREATE OR REPLACE VIEW public.overdue_payments AS
+DROP VIEW IF EXISTS public.overdue_payments CASCADE;
+
+CREATE VIEW public.overdue_payments AS
 SELECT
     efs.enrollment_id,
     efs.trainee_id,
@@ -172,6 +174,6 @@ SELECT
     t.whatsapp_number
 FROM public.enrollment_financial_summary efs
 JOIN public.trainees t ON t.id = efs.trainee_id
-JOIN public.users u ON u.id = t.user_id
+LEFT JOIN public.users u ON u.id = t.user_id
 WHERE efs.payment_status IN ('partial', 'unpaid')
   AND efs.balance > 0;
