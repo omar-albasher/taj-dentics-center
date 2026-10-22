@@ -34,7 +34,7 @@ BEGIN
             'system_name', 'Taj Dentics Training Center',
             'export_type', 'full_system_data_snapshot',
             'version', '1.0.0',
-            'exported_at', to_char(now() AT TIME ZONE 'Asia/Damascus', 'YYYY-MM-DD"T"HH24:MI:SSOF'),
+            'exported_at', to_char(now() AT TIME ZONE 'Asia/Damascus', 'YYYY-MM-DD"T"HH24:MI:SS"+03:00"'),
             'exported_by_user_id', auth.uid(),
             'exported_by_email', (SELECT email FROM auth.users WHERE id = auth.uid()),
             'counts', jsonb_build_object(
