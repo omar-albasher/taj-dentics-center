@@ -30,6 +30,7 @@ class CommandPaletteDialog extends StatefulWidget {
 class _CommandPaletteDialogState extends State<CommandPaletteDialog> {
   final TextEditingController _searchController = TextEditingController();
   final FocusNode _searchFocusNode = FocusNode();
+  final FocusNode _keyboardFocusNode = FocusNode();
   final ScrollController _scrollController = ScrollController();
 
   int _selectedIndex = 0;
@@ -47,6 +48,7 @@ class _CommandPaletteDialogState extends State<CommandPaletteDialog> {
   void dispose() {
     _searchController.dispose();
     _searchFocusNode.dispose();
+    _keyboardFocusNode.dispose();
     _scrollController.dispose();
     super.dispose();
   }
@@ -358,7 +360,7 @@ class _CommandPaletteDialogState extends State<CommandPaletteDialog> {
     }
 
     return KeyboardListener(
-      focusNode: FocusNode(),
+      focusNode: _keyboardFocusNode,
       onKeyEvent: (e) => _handleKeyEvent(e, filtered),
       child: Dialog(
         backgroundColor: Colors.transparent,
