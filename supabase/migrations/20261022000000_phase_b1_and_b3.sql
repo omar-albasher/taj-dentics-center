@@ -164,7 +164,7 @@ SELECT
     efs.enrollment_id,
     efs.trainee_id,
     efs.trainee_name,
-    efs.trainee_code,
+    t.trainee_code,
     efs.course_name,
     efs.cohort_name,
     efs.balance AS balance_due,
