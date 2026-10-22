@@ -1,3 +1,5 @@
+import '../../live_feed/presentation/widgets/live_activity_feed_widget.dart';
+import '../../live_feed/presentation/live_feed_controller.dart';
 import '../../backup/presentation/export_data_dialog.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../core/utils/jwt_utils.dart';
@@ -95,6 +97,7 @@ class DashboardScreen extends ConsumerWidget {
                     if (isAdmin) {
                       ref.invalidate(monthlyTargetProgressProvider);
                     }
+                    ref.read(liveFeedProvider.notifier).refresh();
                   },
                 ),
               ],
@@ -172,109 +175,149 @@ class DashboardScreen extends ConsumerWidget {
 
             SizedBox(height: Responsive.spacing(context, 24)),
 
-            // Overdue
-            Text(
-              'المتأخرون بالدفع',
-              style: TextStyle(
-                fontSize: Responsive.fontSize(context, 18),
-                fontWeight: FontWeight.w700,
-                color: AppColors.gold,
-                fontFamily: 'Cairo',
-              ),
-            ),
-            SizedBox(height: Responsive.spacing(context, 12)),
-
-            overdueAsync.when(
-              loading: () => const Center(
-                child: CircularProgressIndicator(color: AppColors.gold),
-              ),
-              error: (e, _) => AppErrorWidget(
-                message: AppErrorHandler.friendlyMessage(e),
-                onRetry: () => ref.invalidate(overdueProvider),
-              ),
-              data: (list) {
-                if (list.isEmpty) {
-                  return Container(
-                    padding: EdgeInsets.all(Responsive.spacing(context, 24)),
-                    decoration: BoxDecoration(
-                      color: AppColors.cardBg,
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: AppColors.divider),
-                    ),
-                    child: const Center(
-                      child: Text(
-                        '🎉 لا توجد مستحقات متأخرة',
-                        style: TextStyle(
-                          color: AppColors.success,
-                          fontFamily: 'Cairo',
-                          fontSize: 16,
-                        ),
-                      ),
-                    ),
-                  );
-                }
-
-                return Container(
-                  decoration: BoxDecoration(
-                    color: AppColors.cardBg,
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: AppColors.divider),
-                  ),
-                  child: Column(
-                    children: list.asMap().entries.map((entry) {
-                      final i = entry.key;
-                      final e = entry.value;
-                      return Column(
-                        children: [
-                          ListTile(
-                            leading: CircleAvatar(
-                              backgroundColor:
-                                  AppColors.error.withValues(alpha: 0.15),
-                              child: Text(
-                                '${i + 1}',
-                                style: const TextStyle(
-                                  color: AppColors.error,
-                                  fontWeight: FontWeight.w700,
-                                  fontFamily: 'Cairo',
-                                ),
-                              ),
-                            ),
-                            title: Text(
-                              e['trainee_name'] ?? '',
-                              style: const TextStyle(
-                                color: AppColors.textPrimary,
-                                fontFamily: 'Cairo',
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                            subtitle: Text(
-                              e['course_name'] ?? '',
-                              style: const TextStyle(
-                                color: AppColors.textSecondary,
-                                fontFamily: 'Cairo',
-                              ),
-                            ),
-                            trailing: Text(
-                              '${_formatAmount((e['balance_due'] as num?)?.toDouble() ?? 0)} ل.س',
-                              style: const TextStyle(
-                                color: AppColors.error,
-                                fontWeight: FontWeight.w700,
-                                fontFamily: 'Cairo',
-                              ),
-                            ),
+            if (isDesktop) ...[
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    flex: 3,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'المتأخرون بالدفع',
+                          style: TextStyle(
+                            fontSize: Responsive.fontSize(context, 18),
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.gold,
+                            fontFamily: 'Cairo',
                           ),
-                          if (i < list.length - 1)
-                            const Divider(color: AppColors.divider, height: 1),
-                        ],
-                      );
-                    }).toList(),
+                        ),
+                        SizedBox(height: Responsive.spacing(context, 12)),
+                        _buildOverdueSection(context, ref, overdueAsync),
+                      ],
+                    ),
                   ),
-                );
-              },
-            ),
+                  SizedBox(width: Responsive.spacing(context, 24)),
+                  const Expanded(
+                    flex: 2,
+                    child: LiveActivityFeedWidget(),
+                  ),
+                ],
+              ),
+            ] else ...[
+              const LiveActivityFeedWidget(),
+              SizedBox(height: Responsive.spacing(context, 24)),
+              Text(
+                'المتأخرون بالدفع',
+                style: TextStyle(
+                  fontSize: Responsive.fontSize(context, 18),
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.gold,
+                  fontFamily: 'Cairo',
+                ),
+              ),
+              SizedBox(height: Responsive.spacing(context, 12)),
+              _buildOverdueSection(context, ref, overdueAsync),
+            ],
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildOverdueSection(
+    BuildContext context,
+    WidgetRef ref,
+    AsyncValue<List<Map<String, dynamic>>> overdueAsync,
+  ) {
+    return overdueAsync.when(
+      loading: () => const Center(
+        child: CircularProgressIndicator(color: AppColors.gold),
+      ),
+      error: (e, _) => AppErrorWidget(
+        message: AppErrorHandler.friendlyMessage(e),
+        onRetry: () => ref.invalidate(overdueProvider),
+      ),
+      data: (list) {
+        if (list.isEmpty) {
+          return Container(
+            padding: EdgeInsets.all(Responsive.spacing(context, 24)),
+            decoration: BoxDecoration(
+              color: AppColors.cardBg,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: AppColors.divider),
+            ),
+            child: const Center(
+              child: Text(
+                '🎉 لا توجد مستحقات متأخرة',
+                style: TextStyle(
+                  color: AppColors.success,
+                  fontFamily: 'Cairo',
+                  fontSize: 16,
+                ),
+              ),
+            ),
+          );
+        }
+
+        return Container(
+          decoration: BoxDecoration(
+            color: AppColors.cardBg,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: AppColors.divider),
+          ),
+          child: Column(
+            children: list.asMap().entries.map((entry) {
+              final i = entry.key;
+              final e = entry.value;
+              return Column(
+                children: [
+                  ListTile(
+                    leading: CircleAvatar(
+                      backgroundColor:
+                          AppColors.error.withValues(alpha: 0.15),
+                      child: Text(
+                        '${i + 1}',
+                        style: const TextStyle(
+                          color: AppColors.error,
+                          fontWeight: FontWeight.w700,
+                          fontFamily: 'Cairo',
+                        ),
+                      ),
+                    ),
+                    title: Text(
+                      e['trainee_name'] ?? '',
+                      style: const TextStyle(
+                        color: AppColors.textPrimary,
+                        fontFamily: 'Cairo',
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    subtitle: Text(
+                      e['course_name'] ?? '',
+                      style: const TextStyle(
+                        color: AppColors.textSecondary,
+                        fontFamily: 'Cairo',
+                      ),
+                    ),
+                    trailing: Text(
+                      '${_formatAmount((e['balance_due'] as num?)?.toDouble() ?? 0)} ل.س',
+                      style: const TextStyle(
+                        color: AppColors.error,
+                        fontWeight: FontWeight.w700,
+                        fontFamily: 'Cairo',
+                      ),
+                    ),
+                  ),
+                  if (i < list.length - 1)
+                    const Divider(color: AppColors.divider, height: 1),
+                ],
+              );
+            }).toList(),
+          ),
+        );
+      },
     );
   }
 
