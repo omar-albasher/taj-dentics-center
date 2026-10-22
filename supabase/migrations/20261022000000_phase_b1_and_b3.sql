@@ -166,7 +166,6 @@ SELECT
     efs.trainee_name,
     t.trainee_code,
     efs.course_name,
-    efs.cohort_name,
     efs.balance AS balance_due,
     efs.currency,
     efs.payment_status,
