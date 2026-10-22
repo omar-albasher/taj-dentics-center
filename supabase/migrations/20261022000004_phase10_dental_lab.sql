@@ -187,6 +187,10 @@ BEGIN
 END;
 $$;
 
+
+-- Hardening: Prevent direct RPC execution of recalculate_lab_invoice by trainees / reception
+REVOKE ALL ON FUNCTION public.recalculate_lab_invoice(UUID) FROM PUBLIC, anon, authenticated;
+
 -- Trigger on items changes
 CREATE OR REPLACE FUNCTION public.trg_lab_invoice_items_sync()
 RETURNS trigger
@@ -373,7 +377,7 @@ BEGIN
             'system_name', 'Taj Dentics Training Center & Dental Lab',
             'export_type', 'full_system_data_snapshot',
             'version', '1.1.0',
-            'exported_at', to_char(now() AT TIME ZONE 'Asia/Damascus', 'YYYY-MM-DD"T"HH24:MI:SSOF'),
+            'exported_at', to_char(now() AT TIME ZONE 'Asia/Damascus', 'YYYY-MM-DD"T"HH24:MI:SS"+03:00"'),
             'exported_by_user_id', auth.uid(),
             'exported_by_email', (SELECT email FROM auth.users WHERE id = auth.uid()),
             'counts', jsonb_build_object(
