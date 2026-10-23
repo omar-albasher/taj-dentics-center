@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../data/live_feed_repository.dart';
@@ -9,6 +10,7 @@ class LiveFeedState {
   final bool isLoading;
   final String? errorMessage;
   final DateTime? lastRefreshed;
+  final int tick; // Incremented by periodic timer to refresh UI relative times
 
   const LiveFeedState({
     this.events = const [],
@@ -16,6 +18,7 @@ class LiveFeedState {
     this.isLoading = false,
     this.errorMessage,
     this.lastRefreshed,
+    this.tick = 0,
   });
 
   LiveFeedState copyWith({
@@ -24,6 +27,7 @@ class LiveFeedState {
     bool? isLoading,
     String? errorMessage,
     DateTime? lastRefreshed,
+    int? tick,
   }) {
     return LiveFeedState(
       events: events ?? this.events,
@@ -31,6 +35,7 @@ class LiveFeedState {
       isLoading: isLoading ?? this.isLoading,
       errorMessage: errorMessage,
       lastRefreshed: lastRefreshed ?? this.lastRefreshed,
+      tick: tick ?? this.tick,
     );
   }
 }
@@ -43,15 +48,25 @@ class LiveFeedNotifier extends Notifier<LiveFeedState> {
   LiveFeedRepository get _repo => ref.read(liveFeedRepositoryProvider);
   final SupabaseClient _client = Supabase.instance.client;
   RealtimeChannel? _channel;
+  Timer? _timeAgoTimer;
 
   @override
   LiveFeedState build() {
     ref.onDispose(() {
+      _timeAgoTimer?.cancel();
       _channel?.unsubscribe();
     });
 
     _init();
+    _startTimeAgoTicker();
     return const LiveFeedState(isLoading: true);
+  }
+
+  void _startTimeAgoTicker() {
+    // Tick every 30 seconds to update relative timeago descriptions
+    _timeAgoTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+      state = state.copyWith(tick: state.tick + 1);
+    });
   }
 
   Future<void> _init() async {
