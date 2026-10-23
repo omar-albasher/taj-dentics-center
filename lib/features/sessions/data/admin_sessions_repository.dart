@@ -64,7 +64,7 @@ class AdminSessionsRepository {
         .from('sessions')
         .update({
           'status': 'closed',
-          'qr_token': null,
+          // Preserve qr_token to allow offline sync within 30-minute grace window
           'closed_at': DateTime.now().toUtc().toIso8601String(),
         })
         .eq('id', sessionId)
