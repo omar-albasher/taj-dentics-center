@@ -1,3 +1,4 @@
+import 'widgets/course_materials_dialog.dart';
 import '../../sessions/data/admin_sessions_repository.dart';
 import '../../../core/utils/app_error_handler.dart';
 import 'package:go_router/go_router.dart';
@@ -110,6 +111,21 @@ class CourseDetailScreen extends ConsumerWidget {
           onPressed: () => context.canPop() ? context.pop() : context.go(AppRouter.courses),
         ),
         actions: [
+          OutlinedButton.icon(
+            onPressed: () => showDialog(
+              context: context,
+              builder: (_) => CourseMaterialsDialog(course: course),
+            ),
+            icon: const Icon(Icons.folder_open_outlined, size: 18, color: AppColors.gold),
+            label: const Text(
+              'مواد ومرفقات الكورس',
+              style: TextStyle(fontFamily: 'Cairo', fontSize: 13, color: AppColors.gold),
+            ),
+            style: OutlinedButton.styleFrom(
+              side: const BorderSide(color: AppColors.gold),
+            ),
+          ),
+          const SizedBox(width: 8),
           ElevatedButton.icon(
             onPressed: () => _showAddCohortDialog(context, ref, course),
             icon: const Icon(Icons.add, size: 18),
