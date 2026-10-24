@@ -94,7 +94,11 @@ Deno.serve(async (req) => {
     }
     // Reject clock drift in the future (> 5 mins)
     if (scannedTime.getTime() > now.getTime() + 5 * 60 * 1000) {
-      return json({ error: 'توقيت المسح يسبق التوقيت الحالي، يرجى التحقق من ساعة جهازك' }, 400)
+      return json({ error: 'توقيت المسح في المستقبل، يرجى التحقق من ساعة جهازك' }, 400)
+    }
+    // Reject stale timestamps older than 24 hours
+    if (scannedTime.getTime() < now.getTime() - 24 * 60 * 60 * 1000) {
+      return json({ error: 'توقيت المسح قديم جداً وتجاوز 24 ساعة' }, 400)
     }
   }
 
