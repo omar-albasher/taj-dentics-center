@@ -1,3 +1,5 @@
+import '../../../../core/utils/jwt_utils.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:file_picker/file_picker.dart';
@@ -344,6 +346,9 @@ class _CourseMaterialsDialogState extends ConsumerState<CourseMaterialsDialog> {
   @override
   Widget build(BuildContext context) {
     final materialsAsync = ref.watch(courseMaterialsProvider(widget.course.id));
+    final token = Supabase.instance.client.auth.currentSession?.accessToken;
+    final role = JwtUtils.extractRole(token);
+    final isAdmin = role == 'admin';
 
     return Dialog(
       backgroundColor: AppColors.background,
@@ -402,29 +407,47 @@ class _CourseMaterialsDialogState extends ConsumerState<CourseMaterialsDialog> {
               // Action Toolbar
               Row(
                 children: [
-                  ElevatedButton.icon(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.gold,
-                      foregroundColor: Colors.black,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  if (isAdmin) ...[
+                    ElevatedButton.icon(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.gold,
+                        foregroundColor: Colors.black,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      ),
+                      onPressed: _isUploading ? null : _pickAndUploadFile,
+                      icon: const Icon(Icons.upload_file, size: 20),
+                      label: const Text('رفع ملف (PDF / صورة / PPTX)', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold)),
                     ),
-                    onPressed: _isUploading ? null : _pickAndUploadFile,
-                    icon: const Icon(Icons.upload_file, size: 20),
-                    label: const Text('رفع ملف (PDF / صورة / PPTX)', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold)),
-                  ),
-                  const SizedBox(width: 12),
-                  OutlinedButton.icon(
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: AppColors.gold,
-                      side: const BorderSide(color: AppColors.gold),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    const SizedBox(width: 12),
+                    OutlinedButton.icon(
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: AppColors.gold,
+                        side: const BorderSide(color: AppColors.gold),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      ),
+                      onPressed: _isUploading ? null : _showAddLinkDialog,
+                      icon: const Icon(Icons.link, size: 20),
+                      label: const Text('إضافة رابط خارجي (فيديو / درايف)', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold)),
                     ),
-                    onPressed: _isUploading ? null : _showAddLinkDialog,
-                    icon: const Icon(Icons.link, size: 20),
-                    label: const Text('إضافة رابط خارجي (فيديو / درايف)', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold)),
-                  ),
+                  ] else ...[
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: AppColors.textSecondary.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.lock_outline, size: 16, color: AppColors.textSecondary),
+                          SizedBox(width: 6),
+                          Text('وضع العرض فقط (الاستقبال)', style: TextStyle(color: AppColors.textSecondary, fontFamily: 'Cairo', fontSize: 12)),
+                        ],
+                      ),
+                    ),
+                  ],
                   const Spacer(),
                   IconButton(
                     icon: const Icon(Icons.refresh, color: AppColors.gold),
@@ -575,23 +598,25 @@ class _CourseMaterialsDialogState extends ConsumerState<CourseMaterialsDialog> {
                                 tooltip: item.isFile ? 'تحميل ومعاينة' : 'فتح الرابط',
                                 onPressed: () => _openOrDownload(item),
                               ),
-                              IconButton(
-                                icon: Icon(
-                                  item.isPublished ? Icons.visibility : Icons.visibility_off,
-                                  color: item.isPublished ? AppColors.success : AppColors.textSecondary,
-                                  size: 20,
+                              if (isAdmin) ...[
+                                IconButton(
+                                  icon: Icon(
+                                    item.isPublished ? Icons.visibility : Icons.visibility_off,
+                                    color: item.isPublished ? AppColors.success : AppColors.textSecondary,
+                                    size: 20,
+                                  ),
+                                  tooltip: item.isPublished ? 'تحويل لمسودة' : 'نشر للمتدربين',
+                                  onPressed: () async {
+                                    await ref.read(courseMaterialsRepositoryProvider).togglePublish(item.id, !item.isPublished);
+                                    ref.invalidate(courseMaterialsProvider(widget.course.id));
+                                  },
                                 ),
-                                tooltip: item.isPublished ? 'تحويل لمسودة' : 'نشر للمتدربين',
-                                onPressed: () async {
-                                  await ref.read(courseMaterialsRepositoryProvider).togglePublish(item.id, !item.isPublished);
-                                  ref.invalidate(courseMaterialsProvider(widget.course.id));
-                                },
-                              ),
-                              IconButton(
-                                icon: const Icon(Icons.delete_outline, color: AppColors.error, size: 20),
-                                tooltip: 'حذف',
-                                onPressed: () => _confirmDelete(item),
-                              ),
+                                IconButton(
+                                  icon: const Icon(Icons.delete_outline, color: AppColors.error, size: 20),
+                                  tooltip: 'حذف',
+                                  onPressed: () => _confirmDelete(item),
+                                ),
+                              ],
                             ],
                           ),
                         );

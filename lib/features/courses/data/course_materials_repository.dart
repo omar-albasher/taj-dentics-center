@@ -49,21 +49,29 @@ class CourseMaterialsRepository {
       ),
     );
 
-    // 2. Insert record in course_materials
-    final currentUserId = _client.auth.currentUser?.id;
-    final row = await _client.from('course_materials').insert({
-      'course_id': courseId,
-      'title': title,
-      'description': description?.trim().isEmpty == true ? null : description?.trim(),
-      'material_type': 'file',
-      'file_path': storagePath,
-      'file_size_bytes': bytes.length,
-      'mime_type': mimeType,
-      'is_published': isPublished,
-      'created_by': currentUserId,
-    }).select().single();
+    // 2. Insert record in course_materials (with cleanup of orphaned storage file on failure)
+    try {
+      final currentUserId = _client.auth.currentUser?.id;
+      final row = await _client.from('course_materials').insert({
+        'course_id': courseId,
+        'title': title,
+        'description': description?.trim().isEmpty == true ? null : description?.trim(),
+        'material_type': 'file',
+        'file_path': storagePath,
+        'file_size_bytes': bytes.length,
+        'mime_type': mimeType,
+        'is_published': isPublished,
+        'created_by': currentUserId,
+      }).select().single();
 
-    return CourseMaterial.fromMap(row);
+      return CourseMaterial.fromMap(row);
+    } catch (e) {
+      // Prevent orphaned storage objects if database insertion fails
+      try {
+        await _client.storage.from(_bucket).remove([storagePath]);
+      } catch (_) {}
+      rethrow;
+    }
   }
 
   Future<CourseMaterial> addExternalLink({
