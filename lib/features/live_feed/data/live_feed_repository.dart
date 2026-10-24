@@ -23,7 +23,7 @@ class LiveFeedRepository {
   ''';
 
   static const String _attendanceSelect = '''
-    session_id, trainee_id, created_at,
+    session_id, trainee_id, recorded_at,
     trainees!attendance_trainee_id_fkey(
       trainee_code,
       users!trainees_user_id_fkey(full_name)
@@ -82,7 +82,7 @@ class LiveFeedRepository {
       final response = await _client
           .from('attendance')
           .select(_attendanceSelect)
-          .order('created_at', ascending: false)
+          .order('recorded_at', ascending: false)
           .limit(limit);
 
       return (response as List)
@@ -223,8 +223,9 @@ class LiveFeedRepository {
           : (course.isNotEmpty ? '$course - جلسة $num' : 'جلسة رقم $num');
     }
 
-    final createdAt = map['created_at'] != null
-        ? (DateTime.tryParse(map['created_at'].toString()) ?? DateTime.now()).toLocal()
+    final timeVal = map['recorded_at'] ?? map['created_at'];
+    final timestamp = timeVal != null
+        ? (DateTime.tryParse(timeVal.toString()) ?? DateTime.now()).toLocal()
         : DateTime.now();
 
     return ActivityEvent(
@@ -233,7 +234,7 @@ class LiveFeedRepository {
       title: 'تسجيل حضور جلسة',
       subtitle: '$traineeName ${code != null ? "($code)" : ""}',
       detail: sessionTitle.isNotEmpty ? sessionTitle : null,
-      timestamp: createdAt,
+      timestamp: timestamp,
       traineeCode: code,
     );
   }
