@@ -114,3 +114,12 @@ BEGIN
   );
 END;
 $$;
+
+-- 4. Hardening & Security Revokes:
+-- Restrict auto_open_close_sessions so only cron / service_role / postgres can invoke it
+REVOKE EXECUTE ON FUNCTION public.auto_open_close_sessions(BOOLEAN) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.auto_open_close_sessions(BOOLEAN) TO service_role;
+
+-- Restrict custom_access_token_hook so regular users/anon cannot invoke it via RPC
+REVOKE EXECUTE ON FUNCTION public.custom_access_token_hook(JSONB) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.custom_access_token_hook(JSONB) TO supabase_auth_admin, service_role;
