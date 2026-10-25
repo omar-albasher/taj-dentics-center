@@ -13,8 +13,7 @@
 -- ==============================================================================
 
 -- 1. Table: user_fcm_tokens
-DROP TABLE IF EXISTS public.user_fcm_tokens CASCADE;
-CREATE TABLE public.user_fcm_tokens (
+CREATE TABLE IF NOT EXISTS public.user_fcm_tokens (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
   fcm_token TEXT NOT NULL UNIQUE,
