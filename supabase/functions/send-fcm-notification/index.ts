@@ -112,11 +112,24 @@ Deno.serve(async (req) => {
     return jsonResponse({ error: 'Method not allowed' }, 405)
   }
 
-  // 2. Internal scheduler trigger
+  // 2. Strict Authentication: Fail-Closed validation
+  // Accepts either matched CRON_SECRET or service_role Bearer authorization
+  const expectedSecret = Deno.env.get('CRON_SECRET')?.trim()
+  const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')?.trim()
+
+  const providedSecret = req.headers.get('x-cron-secret')?.trim()
+  const authHeader = req.headers.get('Authorization')?.trim()
+  const providedBearer = authHeader?.startsWith('Bearer ') ? authHeader.slice(7).trim() : null
+
+  const isCronAuthorized = Boolean(expectedSecret && providedSecret && providedSecret === expectedSecret)
+  const isServiceRoleAuthorized = Boolean(serviceRoleKey && providedBearer && providedBearer === serviceRoleKey)
+
+  if (!isCronAuthorized && !isServiceRoleAuthorized) {
+    return jsonResponse({ error: 'Unauthorized: invalid or missing cron secret' }, 401)
+  }
 
   // 3. Initialize Supabase Admin Client
   const supabaseUrl = Deno.env.get('SUPABASE_URL')
-  const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
   if (!supabaseUrl || !serviceRoleKey) {
     return jsonResponse({ error: 'Server misconfiguration: missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY' }, 500)
   }
@@ -131,7 +144,20 @@ Deno.serve(async (req) => {
     }, 503)
   }
 
-  // 5. Claim batch from outbox (atomic SKIP LOCKED)
+  // 5. Obtain Google OAuth2 token BEFORE claiming batch from outbox
+  // This guarantees that if Google Auth fails or is down, ZERO attempts are burned on notifications
+  let accessToken: string
+  let projectId: string
+  try {
+    const authInfo = await getGoogleAccessToken(serviceAccountJson)
+    accessToken = authInfo.accessToken
+    projectId = authInfo.projectId
+  } catch (err: any) {
+    console.error('Google Auth failure:', err)
+    return jsonResponse({ error: `Firebase Auth failed before claiming batch: ${err.message}` }, 500)
+  }
+
+  // 6. Claim batch from outbox (atomic SKIP LOCKED)
   const { data: batch, error: claimErr } = await supabase.rpc('claim_notification_batch', { p_limit: 50 })
   if (claimErr) {
     console.error('Error claiming outbox batch:', claimErr)
@@ -145,25 +171,6 @@ Deno.serve(async (req) => {
       claimed: 0,
       sent: 0,
     })
-  }
-
-  // 6. Obtain Google OAuth2 token
-  let accessToken: string
-  let projectId: string
-  try {
-    const authInfo = await getGoogleAccessToken(serviceAccountJson)
-    accessToken = authInfo.accessToken
-    projectId = authInfo.projectId
-  } catch (err: any) {
-    console.error('Google Auth failure:', err)
-    // Unlock claimed rows so they can be retried later
-    const ids = batch.map((r: any) => r.outbox_id)
-    await supabase
-      .from('notification_outbox')
-      .update({ status: 'pending', locked_at: null, last_error: `Auth failed: ${err.message}` })
-      .in('id', ids)
-
-    return jsonResponse({ error: `Firebase Auth failed: ${err.message}` }, 500)
   }
 
   const fcmSendUrl = `https://fcm.googleapis.com/v1/projects/${projectId}/messages:send`
@@ -229,6 +236,7 @@ Deno.serve(async (req) => {
           },
           android: {
             priority: isHighPriority ? 'HIGH' : 'NORMAL',
+            ttl: isHighPriority ? '3600s' : '86400s', // 1h for time-sensitive sessions, 24h for surveys/payments
             notification: {
               channel_id: 'taj_reminders',
               sound: 'default',
@@ -254,11 +262,10 @@ Deno.serve(async (req) => {
           const resText = await fcmRes.text()
           lastErrorMsg = `FCM ${fcmRes.status}: ${resText}`
 
-          // Deactivate dead tokens (UNREGISTERED or INVALID_ARGUMENT)
+          // Deactivate dead tokens strictly on UNREGISTERED (do not deactivate on generic INVALID_ARGUMENT)
           if (
             resText.includes('UNREGISTERED') ||
-            resText.includes('registration-token-not-registered') ||
-            resText.includes('INVALID_ARGUMENT')
+            resText.includes('registration-token-not-registered')
           ) {
             console.log(`Deactivating dead FCM token: ${token.slice(0, 15)}...`)
             await supabase
