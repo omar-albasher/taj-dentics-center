@@ -1,3 +1,6 @@
+CREATE EXTENSION IF NOT EXISTS pg_net;
+CREATE EXTENSION IF NOT EXISTS pg_cron;
+
 -- ==============================================================================
 -- Taj Dentics Training Center - Phase A1: Push Notifications Scheduler
 -- 1. dispatch_push_batch function via pg_net & vault
