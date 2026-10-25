@@ -1,6 +1,3 @@
-CREATE EXTENSION IF NOT EXISTS pg_net;
-CREATE EXTENSION IF NOT EXISTS pg_cron;
-
 -- ==============================================================================
 -- Taj Dentics Training Center - Phase A1: Push Notifications Scheduler
 -- 1. dispatch_push_batch function via pg_net & vault
@@ -9,6 +6,9 @@ CREATE EXTENSION IF NOT EXISTS pg_cron;
 --    - Due payment reminders: daily at 07:00 UTC (10:00 Damascus)
 --    - Batch push dispatcher: every minute
 -- ==============================================================================
+
+CREATE EXTENSION IF NOT EXISTS pg_net;
+CREATE EXTENSION IF NOT EXISTS pg_cron;
 
 CREATE OR REPLACE FUNCTION public.dispatch_push_batch()
 RETURNS BIGINT
@@ -19,18 +19,28 @@ AS $$
 DECLARE
   v_url TEXT;
   v_secret TEXT;
+  v_slug TEXT := 'send-fcm-notification';
 BEGIN
   SELECT decrypted_secret INTO v_url
   FROM vault.decrypted_secrets WHERE name = 'project_url';
   SELECT decrypted_secret INTO v_secret
   FROM vault.decrypted_secrets WHERE name = 'cron_secret';
+  
+  -- Dynamic slug resolution: defaults to 'send-fcm-notification',
+  -- allows override via Vault secret 'push_function_slug' (e.g. 'bright-endpoint')
+  SELECT decrypted_secret INTO v_slug
+  FROM vault.decrypted_secrets WHERE name = 'push_function_slug';
+
+  IF v_slug IS NULL OR length(trim(v_slug)) = 0 THEN
+    v_slug := 'send-fcm-notification';
+  END IF;
 
   IF v_url IS NULL OR v_secret IS NULL THEN
     RAISE EXCEPTION 'push scheduler secrets missing in vault (project_url or cron_secret)';
   END IF;
 
   RETURN net.http_post(
-    url := rtrim(v_url, '/') || '/functions/v1/bright-endpoint',
+    url := rtrim(v_url, '/') || '/functions/v1/' || trim(v_slug),
     headers := jsonb_build_object(
       'Content-Type', 'application/json',
       'x-cron-secret', trim(v_secret)
