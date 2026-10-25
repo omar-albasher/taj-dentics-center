@@ -31,12 +31,8 @@ BEGIN
   SELECT decrypted_secret INTO v_slug
   FROM vault.decrypted_secrets WHERE name = 'push_function_slug';
 
-  IF v_slug IS NULL OR length(trim(v_slug)) = 0 THEN
-    v_slug := 'send-fcm-notification';
-  END IF;
-
-  IF v_url IS NULL OR v_secret IS NULL THEN
-    RAISE EXCEPTION 'push scheduler secrets missing in vault (project_url or cron_secret)';
+  IF v_url IS NULL OR v_secret IS NULL OR v_slug IS NULL OR length(trim(v_slug)) = 0 THEN
+    RAISE EXCEPTION 'push scheduler secrets missing in vault (project_url, cron_secret, or push_function_slug)';
   END IF;
 
   RETURN net.http_post(
