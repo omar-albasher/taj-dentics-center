@@ -152,6 +152,7 @@ BEGIN
       s.id AS session_id,
       co.name || COALESCE(' — ' || NULLIF(s.title, ''), '') AS display_name,
       to_char(s.scheduled_at at time zone 'Asia/Damascus', 'HH24:MI') AS start_time,
+      s.scheduled_at AS session_scheduled_at,
       'session:' || s.id || ':user:' || t.user_id || ':60' AS dedupe_key
     FROM public.sessions s
     JOIN public.cohorts ch ON ch.id = s.cohort_id
@@ -186,6 +187,7 @@ BEGIN
       jsonb_build_object(
         'type', 'session_reminder',
         'session_id', te.session_id,
+        'scheduled_at', te.session_scheduled_at,
         'route', '/home'
       ),
       te.dedupe_key
@@ -310,6 +312,7 @@ FOR EACH ROW
 EXECUTE FUNCTION public.trg_fn_enqueue_survey_notification();
 
 -- 8. Claim Function: Batch claiming with FOR UPDATE SKIP LOCKED & Dead-letter Sweeper
+DROP FUNCTION IF EXISTS public.claim_notification_batch(INTEGER);
 CREATE OR REPLACE FUNCTION public.claim_notification_batch(p_limit INTEGER DEFAULT 50)
 RETURNS TABLE (
   outbox_id UUID,
@@ -320,6 +323,7 @@ RETURNS TABLE (
   notification_data JSONB,
   attempt_number INTEGER,
   max_attempts INTEGER,
+  created_at TIMESTAMPTZ,
   fcm_tokens TEXT[]
 )
 LANGUAGE plpgsql
@@ -363,7 +367,7 @@ BEGIN
         locked_at = now()
     FROM locked_rows lr
     WHERE o.id = lr.id
-    RETURNING o.id, o.user_id, o.type, o.title, o.body, o.data, o.attempts, o.max_attempts
+    RETURNING o.id, o.user_id, o.type, o.title, o.body, o.data, o.attempts, o.max_attempts, o.created_at
   )
   SELECT 
     m.id AS outbox_id,
@@ -374,6 +378,7 @@ BEGIN
     m.data AS notification_data,
     m.attempts AS attempt_number,
     m.max_attempts AS max_attempts,
+    m.created_at AS created_at,
     COALESCE(
       (
         SELECT array_agg(t.fcm_token)

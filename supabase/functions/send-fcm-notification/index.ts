@@ -181,15 +181,21 @@ Deno.serve(async (req) => {
 
   // 7. Dispatch each notification in batch
   for (const item of batch) {
-    // Stale Session Check: Skip session reminders created > 2 hours ago if delayed
-    const createdAt = new Date(item.created_at || 0).getTime()
-    if (item.notification_type === 'session_reminder' && createdAt > 0 && Date.now() - createdAt > 2 * 3600 * 1000) {
-      console.log(`Skipping expired session reminder: ${item.outbox_id}`)
+    // Stale Session Check: Skip session reminders if session already started OR created > 75 mins ago
+    const scheduledAtStr = item.notification_data?.scheduled_at
+    const scheduledAt = scheduledAtStr ? new Date(scheduledAtStr).getTime() : 0
+    const createdAt = new Date(item.created_at || item.notification_data?.created_at || 0).getTime()
+
+    const isSessionStarted = scheduledAt > 0 && Date.now() >= scheduledAt
+    const isOutboxExpired = createdAt > 0 && Date.now() - createdAt > 75 * 60 * 1000
+
+    if (item.notification_type === 'session_reminder' && (isSessionStarted || isOutboxExpired)) {
+      console.log(`Skipping expired session reminder: ${item.outbox_id} (started: ${isSessionStarted}, expired: ${isOutboxExpired})`)
       await supabase
         .from('notification_outbox')
         .update({
           status: 'skipped',
-          last_error: 'session_reminder_expired_in_outbox',
+          last_error: isSessionStarted ? 'session_already_started' : 'session_reminder_expired_in_outbox',
           locked_at: null,
         })
         .eq('id', item.outbox_id)
