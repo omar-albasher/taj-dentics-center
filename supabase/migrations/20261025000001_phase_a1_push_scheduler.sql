@@ -33,7 +33,7 @@ BEGIN
     url := rtrim(v_url, '/') || '/functions/v1/bright-endpoint',
     headers := jsonb_build_object(
       'Content-Type', 'application/json',
-      'x-cron-secret', v_secret
+      'x-cron-secret', trim(v_secret)
     ),
     body := '{}'::jsonb,
     timeout_milliseconds := 30000
