@@ -181,6 +181,22 @@ Deno.serve(async (req) => {
 
   // 7. Dispatch each notification in batch
   for (const item of batch) {
+    // Stale Session Check: Skip session reminders created > 2 hours ago if delayed
+    const createdAt = new Date(item.created_at || 0).getTime()
+    if (item.notification_type === 'session_reminder' && createdAt > 0 && Date.now() - createdAt > 2 * 3600 * 1000) {
+      console.log(`Skipping expired session reminder: ${item.outbox_id}`)
+      await supabase
+        .from('notification_outbox')
+        .update({
+          status: 'skipped',
+          last_error: 'session_reminder_expired_in_outbox',
+          locked_at: null,
+        })
+        .eq('id', item.outbox_id)
+      skippedCount++
+      continue
+    }
+
     const tokens: string[] = item.fcm_tokens || []
 
     if (tokens.length === 0) {
