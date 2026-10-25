@@ -27,7 +27,7 @@ BEGIN
   END IF;
 
   RETURN net.http_post(
-    url := rtrim(v_url, '/') || '/functions/v1/send-fcm-notification',
+    url := rtrim(v_url, '/') || '/functions/v1/bright-endpoint',
     headers := jsonb_build_object(
       'Content-Type', 'application/json',
       'x-cron-secret', v_secret
