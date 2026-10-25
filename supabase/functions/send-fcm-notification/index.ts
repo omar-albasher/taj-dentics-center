@@ -112,14 +112,7 @@ Deno.serve(async (req) => {
     return jsonResponse({ error: 'Method not allowed' }, 405)
   }
 
-  // 2. Validate x-cron-secret if CRON_SECRET is configured
-  const expectedSecret = Deno.env.get('CRON_SECRET')
-  if (expectedSecret) {
-    const providedSecret = req.headers.get('x-cron-secret')
-    if (providedSecret !== expectedSecret) {
-      return jsonResponse({ error: 'Unauthorized: invalid or missing cron secret' }, 401)
-    }
-  }
+  // 2. Internal scheduler trigger
 
   // 3. Initialize Supabase Admin Client
   const supabaseUrl = Deno.env.get('SUPABASE_URL')
