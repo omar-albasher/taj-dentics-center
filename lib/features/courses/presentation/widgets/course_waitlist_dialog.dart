@@ -38,7 +38,8 @@ class _CourseWaitlistDialogState extends ConsumerState<CourseWaitlistDialog> {
     ref.invalidate(cohortsByCourseProvider(widget.course.id));
   }
 
-  void _showMessage(String message, {bool success = false, bool error = false}) {
+  void _showMessage(String message,
+      {bool success = false, bool error = false}) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message, style: const TextStyle(fontFamily: 'Cairo')),
@@ -211,7 +212,8 @@ class _CourseWaitlistDialogState extends ConsumerState<CourseWaitlistDialog> {
                     ),
                   ),
                   IconButton(
-                    icon: const Icon(Icons.close, color: AppColors.textSecondary),
+                    icon:
+                        const Icon(Icons.close, color: AppColors.textSecondary),
                     onPressed: () => Navigator.pop(context),
                   ),
                 ],
@@ -249,7 +251,7 @@ class _CourseWaitlistDialogState extends ConsumerState<CourseWaitlistDialog> {
                   ],
                 ),
               SizedBox(height: Responsive.spacing(context, 12)),
-              if (seat?.isUnlimited != true)
+              if (seat?.isFull == true)
                 traineesAsync.when(
                   loading: () => const SizedBox(
                     height: 48,
@@ -300,8 +302,9 @@ class _CourseWaitlistDialogState extends ConsumerState<CourseWaitlistDialog> {
                       ),
                       const SizedBox(width: 8),
                       ElevatedButton.icon(
-                        onPressed:
-                            _selectedTraineeId == null || _busy ? null : _addSelected,
+                        onPressed: _selectedTraineeId == null || _busy
+                            ? null
+                            : _addSelected,
                         icon: const Icon(Icons.playlist_add, size: 18),
                         label: const Text(
                           'إضافة',
@@ -317,9 +320,12 @@ class _CourseWaitlistDialogState extends ConsumerState<CourseWaitlistDialog> {
                     ],
                   ),
                 )
-              else
+              else if (seat != null)
                 Text(
-                  'هذه المجموعة غير محدودة السعة — لا حاجة لقائمة انتظار.',
+                  seat.isUnlimited
+                      ? 'هذه المجموعة غير محدودة السعة — لا حاجة لقائمة انتظار.'
+                      : 'لا يمكن إضافة متدرب إلى الانتظار قبل امتلاء المجموعة — '
+                          'ما زال هناك ${seat.availableSeats ?? 0} مقعد متاح.',
                   style: TextStyle(
                     fontSize: Responsive.fontSize(context, 12),
                     color: AppColors.textSecondary,
@@ -493,8 +499,8 @@ class _CourseWaitlistDialogState extends ConsumerState<CourseWaitlistDialog> {
             onPressed: _busy ? null : () => _promote(entry),
           ),
           IconButton(
-            icon:
-                const Icon(Icons.cancel_outlined, color: AppColors.error, size: 20),
+            icon: const Icon(Icons.cancel_outlined,
+                color: AppColors.error, size: 20),
             tooltip: 'إلغاء الطلب',
             onPressed: _busy ? null : () => _cancel(entry),
           ),
@@ -640,7 +646,8 @@ class _PromoteWaitlistDialogState
                     ),
                   ),
                   IconButton(
-                    icon: const Icon(Icons.close, color: AppColors.textSecondary),
+                    icon:
+                        const Icon(Icons.close, color: AppColors.textSecondary),
                     onPressed: () => Navigator.pop(context),
                   ),
                 ],
@@ -698,7 +705,8 @@ class _PromoteWaitlistDialogState
                         decimal: true,
                       ),
                       style: const TextStyle(color: AppColors.textPrimary),
-                      decoration: _dialogDecoration('السعر *', Icons.attach_money),
+                      decoration:
+                          _dialogDecoration('السعر *', Icons.attach_money),
                     ),
                   ),
                   SizedBox(width: Responsive.spacing(context, 12)),
@@ -706,7 +714,8 @@ class _PromoteWaitlistDialogState
                     child: DropdownButtonFormField<String>(
                       initialValue: _currency,
                       dropdownColor: AppColors.cardBg,
-                      decoration: _dialogDecoration('العملة', Icons.payments_outlined),
+                      decoration:
+                          _dialogDecoration('العملة', Icons.payments_outlined),
                       items: const [
                         DropdownMenuItem(
                           value: 'SYP',
