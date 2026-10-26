@@ -5,6 +5,7 @@ class CohortModel {
   final String trainerId;
   final String name;
   final DateTime? startsAt;
+  final int? capacity;
   final bool isActive;
 
   const CohortModel({
@@ -14,6 +15,7 @@ class CohortModel {
     required this.trainerId,
     required this.name,
     this.startsAt,
+    this.capacity,
     required this.isActive,
   });
 
@@ -26,7 +28,10 @@ class CohortModel {
       name: map['name'] ?? '',
       startsAt:
           map['starts_at'] != null ? DateTime.tryParse(map['starts_at'])?.toLocal() : null,
+      capacity: (map['capacity'] as num?)?.toInt(),
       isActive: map['is_active'] ?? true,
     );
   }
+
+  bool get hasLimitedCapacity => capacity != null;
 }

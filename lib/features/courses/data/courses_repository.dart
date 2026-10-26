@@ -1,4 +1,6 @@
 import 'package:admin_dashboard/features/courses/domain/cohort_model.dart';
+import 'package:admin_dashboard/features/courses/domain/cohort_seat_status.dart';
+import 'package:admin_dashboard/features/courses/domain/waitlist_entry_model.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../domain/course_model.dart';
@@ -63,14 +65,107 @@ class CoursesRepository {
     required String name,
     required String trainerId,
     DateTime? startsAt,
+    int? capacity,
   }) async {
     await _client.from('cohorts').insert({
       'course_id': courseId,
       'name': name,
       'trainer_id': trainerId,
       'starts_at': startsAt?.toUtc().toIso8601String(),
+      if (capacity != null) 'capacity': capacity,
       'created_by': _client.auth.currentUser!.id,
     });
+  }
+
+  Future<void> updateCohortCapacity({
+    required String cohortId,
+    required int? capacity,
+  }) async {
+    await _client
+        .from('cohorts')
+        .update({'capacity': capacity}).eq('id', cohortId);
+  }
+
+  Future<List<CohortSeatStatus>> getCohortSeatStatus({String? courseId}) async {
+    final response = await _client.rpc(
+      'get_cohorts_seat_status',
+      params: {'p_course_id': courseId},
+    );
+
+    return (response as List)
+        .map((e) =>
+            CohortSeatStatus.fromMap(Map<String, dynamic>.from(e as Map)))
+        .toList();
+  }
+
+  Future<List<WaitlistEntryModel>> getActiveWaitlist(String cohortId) async {
+    final response = await _client
+        .from('course_waitlist')
+        .select('''
+*,
+trainees!course_waitlist_trainee_id_fkey(
+  id,
+  trainee_code,
+  full_name,
+  full_name_ar,
+  full_name_en,
+  phone,
+  users!trainees_user_id_fkey(
+    id,
+    full_name,
+    phone,
+    is_active
+  )
+)
+''')
+        .eq('cohort_id', cohortId)
+        .inFilter('status', ['waiting', 'notified'])
+        .order('joined_at', ascending: true);
+
+    return (response as List)
+        .map((e) =>
+            WaitlistEntryModel.fromMap(Map<String, dynamic>.from(e as Map)))
+        .toList();
+  }
+
+  Future<Map<String, dynamic>> joinWaitlist({
+    required String cohortId,
+    String? traineeId,
+  }) async {
+    final response = await _client.rpc(
+      'join_course_waitlist',
+      params: {
+        'p_cohort_id': cohortId,
+        if (traineeId != null) 'p_trainee_id': traineeId,
+      },
+    );
+    return Map<String, dynamic>.from(response as Map);
+  }
+
+  Future<Map<String, dynamic>> cancelWaitlist(String waitlistId) async {
+    final response = await _client.rpc(
+      'cancel_course_waitlist',
+      params: {'p_waitlist_id': waitlistId},
+    );
+    return Map<String, dynamic>.from(response as Map);
+  }
+
+  Future<Map<String, dynamic>> promoteWaitlist({
+    required String waitlistId,
+    required double totalDue,
+    double discountAmount = 0,
+    String currency = 'SYP',
+  }) async {
+    final response = await _client.rpc(
+      'promote_waitlist_trainee',
+      params: {
+        'p_waitlist_id': waitlistId,
+        'p_total_due': totalDue,
+        'p_discount_amount': discountAmount,
+        'p_currency': currency,
+      },
+    );
+    return Map<String, dynamic>.from(response as Map);
   }
 
   Future<void> enrollTrainee({
@@ -155,6 +250,18 @@ final allActiveCohortsProvider =
 final cohortsByCourseProvider =
     FutureProvider.family<List<CohortModel>, String>((ref, courseId) {
   return ref.watch(coursesRepositoryProvider).getCohortsByCourse(courseId);
+});
+
+final cohortSeatStatusProvider =
+    FutureProvider.family<List<CohortSeatStatus>, String?>((ref, courseId) {
+  return ref
+      .watch(coursesRepositoryProvider)
+      .getCohortSeatStatus(courseId: courseId);
+});
+
+final waitlistProvider =
+    FutureProvider.family<List<WaitlistEntryModel>, String>((ref, cohortId) {
+  return ref.watch(coursesRepositoryProvider).getActiveWaitlist(cohortId);
 });
 
 
