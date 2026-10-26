@@ -1,7 +1,8 @@
-﻿import 'package:flutter/foundation.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../domain/referral_models.dart';
 import '../domain/trainee_model.dart';
 
 class TraineesRepository {
@@ -21,7 +22,8 @@ users!trainees_user_id_fkey(
 
     if (search != null && search.trim().isNotEmpty) {
       final s = search.trim();
-      query = query.or('trainee_code.ilike.%$s%,full_name_ar.ilike.%$s%,full_name_en.ilike.%$s%,users.full_name.ilike.%$s%');
+      query = query.or(
+          'trainee_code.ilike.%$s%,full_name_ar.ilike.%$s%,full_name_en.ilike.%$s%,users.full_name.ilike.%$s%');
     }
 
     final response = await query.order('created_at', ascending: false);
@@ -46,6 +48,22 @@ users!trainees_user_id_fkey(
     } catch (_) {
       return null;
     }
+  }
+
+  Future<ReferralPreview> previewReferralCode(String code) async {
+    final response = await _client.rpc(
+      'preview_referral_code',
+      params: {'p_code': code.trim()},
+    );
+    return ReferralPreview.fromMap(Map<String, dynamic>.from(response as Map));
+  }
+
+  Future<ReferralSummary> getStaffReferralSummary(String traineeId) async {
+    final response = await _client.rpc(
+      'get_staff_referral_summary',
+      params: {'p_trainee_id': traineeId},
+    );
+    return ReferralSummary.fromMap(Map<String, dynamic>.from(response as Map));
   }
 
   Future<Map<String, dynamic>> getTraineeProfile(String traineeId) async {
@@ -109,9 +127,17 @@ users!trainees_user_id_fkey(
     try {
       String? traineeId = data is Map ? (data['trainee_id'] as String?) : null;
       if (traineeId == null) {
-        final u = await _client.from('users').select('id').eq('email', email).maybeSingle();
+        final u = await _client
+            .from('users')
+            .select('id')
+            .eq('email', email)
+            .maybeSingle();
         if (u != null) {
-          final t = await _client.from('trainees').select('id').eq('user_id', u['id']).maybeSingle();
+          final t = await _client
+              .from('trainees')
+              .select('id')
+              .eq('user_id', u['id'])
+              .maybeSingle();
           traineeId = t?['id'] as String?;
         }
       }
@@ -139,8 +165,7 @@ users!trainees_user_id_fkey(
             'behavioral_notes': behavioralNotes.trim(),
           if (academicNotes != null && academicNotes.trim().isNotEmpty)
             'academic_notes': academicNotes.trim(),
-          if (notes != null && notes.trim().isNotEmpty)
-            'notes': notes.trim(),
+          if (notes != null && notes.trim().isNotEmpty) 'notes': notes.trim(),
           if (batchDate != null)
             'batch_date': batchDate.toIso8601String().split('T')[0],
         };
@@ -217,4 +242,11 @@ final traineeProfileProvider =
 final traineeByIdProvider =
     FutureProvider.family<TraineeModel?, String>((ref, id) {
   return ref.watch(traineesRepositoryProvider).getTraineeById(id);
+});
+
+final staffReferralSummaryProvider =
+    FutureProvider.family<ReferralSummary, String>((ref, traineeId) {
+  return ref
+      .watch(traineesRepositoryProvider)
+      .getStaffReferralSummary(traineeId);
 });

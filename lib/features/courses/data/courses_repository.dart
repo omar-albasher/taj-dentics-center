@@ -155,7 +155,11 @@ trainees!course_waitlist_trainee_id_fkey(
     required double totalDue,
     double discountAmount = 0,
     String currency = 'SYP',
+    String? referralCode,
+    double referralDiscountAmount = 0,
   }) async {
+    final hasReferral = referralCode != null && referralCode.trim().isNotEmpty;
+
     final response = await _client.rpc(
       'promote_waitlist_trainee',
       params: {
@@ -163,6 +167,10 @@ trainees!course_waitlist_trainee_id_fkey(
         'p_total_due': totalDue,
         'p_discount_amount': discountAmount,
         'p_currency': currency,
+        if (hasReferral) ...{
+          'p_referral_code': referralCode.trim().toUpperCase(),
+          'p_referral_discount_amount': referralDiscountAmount,
+        },
       },
     );
     return Map<String, dynamic>.from(response as Map);
@@ -174,7 +182,11 @@ trainees!course_waitlist_trainee_id_fkey(
     required double totalDue,
     required double discountAmount,
     required String currency,
+    String? referralCode,
+    double referralDiscountAmount = 0,
   }) async {
+    final hasReferral = referralCode != null && referralCode.trim().isNotEmpty;
+
     await _client.from('enrollments').insert({
       'trainee_id': traineeId,
       'cohort_id': cohortId,
@@ -182,6 +194,10 @@ trainees!course_waitlist_trainee_id_fkey(
       'discount_amount': discountAmount,
       'currency': currency,
       'created_by': _client.auth.currentUser!.id,
+      if (hasReferral) ...{
+        'referral_code': referralCode.trim().toUpperCase(),
+        'referral_discount_amount': referralDiscountAmount,
+      },
     });
   }
 
@@ -209,11 +225,8 @@ trainees!course_waitlist_trainee_id_fkey(
   }
 
   Future<CourseModel?> getCourseById(String id) async {
-    final response = await _client
-        .from('courses')
-        .select()
-        .eq('id', id)
-        .maybeSingle();
+    final response =
+        await _client.from('courses').select().eq('id', id).maybeSingle();
     if (response == null) return null;
     return CourseModel.fromMap(response);
   }
@@ -263,7 +276,6 @@ final waitlistProvider =
     FutureProvider.family<List<WaitlistEntryModel>, String>((ref, cohortId) {
   return ref.watch(coursesRepositoryProvider).getActiveWaitlist(cohortId);
 });
-
 
 final courseByIdProvider =
     FutureProvider.family<CourseModel?, String>((ref, id) {

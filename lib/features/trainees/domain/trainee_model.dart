@@ -63,9 +63,14 @@ class TraineeModel {
 
     final code = map['trainee_code'] as String?;
     final nameAr = map['full_name_ar'] as String?;
-    final resolvedFullName = nameAr ?? user['full_name'] ?? map['full_name'] ?? '';
-    final rawWhatsapp = map['whatsapp_number'] ?? map['whatsapp'] ?? notesMeta['whatsapp'] ?? '';
-    final rawUni = map['university_name'] ?? map['university'] ?? notesMeta['university'];
+    final resolvedFullName =
+        nameAr ?? user['full_name'] ?? map['full_name'] ?? '';
+    final rawWhatsapp = map['whatsapp_number'] ??
+        map['whatsapp'] ??
+        notesMeta['whatsapp'] ??
+        '';
+    final rawUni =
+        map['university_name'] ?? map['university'] ?? notesMeta['university'];
 
     return TraineeModel(
       id: map['id'] ?? '',
@@ -82,10 +87,14 @@ class TraineeModel {
       province: (map['province'] ?? notesMeta['province'] ?? '').toString(),
       university: rawUni as String?,
       universityName: map['university_name'] as String?,
-      academicYear: (map['academic_year'] ?? notesMeta['academic_year']) as String?,
-      notes: notesMeta.isNotEmpty ? (notesMeta['general_notes'] ?? '') : rawNotes,
-      behavioralNotes: (map['behavioral_notes'] ?? notesMeta['behavioral_notes']) as String?,
-      academicNotes: (map['academic_notes'] ?? notesMeta['academic_notes']) as String?,
+      academicYear:
+          (map['academic_year'] ?? notesMeta['academic_year']) as String?,
+      notes:
+          notesMeta.isNotEmpty ? (notesMeta['general_notes'] ?? '') : rawNotes,
+      behavioralNotes:
+          (map['behavioral_notes'] ?? notesMeta['behavioral_notes']) as String?,
+      academicNotes:
+          (map['academic_notes'] ?? notesMeta['academic_notes']) as String?,
       batchDate: DateTime.tryParse(map['batch_date'] ?? ''),
       isActive: user['is_active'] ?? true,
       createdAt: DateTime.tryParse(map['created_at'] ?? '') ?? DateTime.now(),

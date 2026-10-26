@@ -19,6 +19,7 @@ import '../domain/cohort_model.dart';
 import '../domain/cohort_seat_status.dart';
 import '../domain/waitlist_entry_model.dart';
 import '../../trainees/data/trainees_repository.dart';
+import '../../trainees/presentation/widgets/referral_input_fields.dart';
 
 class CourseDetailScreen extends ConsumerWidget {
   final String courseId;
@@ -51,7 +52,9 @@ class CourseDetailScreen extends ConsumerWidget {
           backgroundColor: AppColors.background,
           leading: IconButton(
             icon: const Icon(Icons.arrow_back_ios, color: AppColors.gold),
-            onPressed: () => context.canPop() ? context.pop() : context.go(AppRouter.courses),
+            onPressed: () => context.canPop()
+                ? context.pop()
+                : context.go(AppRouter.courses),
           ),
         ),
         body: Center(
@@ -61,7 +64,8 @@ class CourseDetailScreen extends ConsumerWidget {
               const Icon(Icons.error_outline, color: AppColors.error, size: 48),
               const SizedBox(height: 16),
               Text(AppErrorHandler.friendlyMessage(e),
-                  style: const TextStyle(color: AppColors.error, fontFamily: 'Cairo')),
+                  style: const TextStyle(
+                      color: AppColors.error, fontFamily: 'Cairo')),
               const SizedBox(height: 12),
               ElevatedButton(
                 onPressed: () => ref.invalidate(courseByIdProvider(courseId)),
@@ -80,13 +84,16 @@ class CourseDetailScreen extends ConsumerWidget {
               backgroundColor: AppColors.background,
               leading: IconButton(
                 icon: const Icon(Icons.arrow_back_ios, color: AppColors.gold),
-                onPressed: () => context.canPop() ? context.pop() : context.go(AppRouter.courses),
+                onPressed: () => context.canPop()
+                    ? context.pop()
+                    : context.go(AppRouter.courses),
               ),
             ),
             body: const Center(
               child: Text(
                 'الكورس غير موجود أو تم حذفه',
-                style: TextStyle(color: AppColors.textSecondary, fontFamily: 'Cairo'),
+                style: TextStyle(
+                    color: AppColors.textSecondary, fontFamily: 'Cairo'),
               ),
             ),
           );
@@ -96,7 +103,8 @@ class CourseDetailScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildContent(BuildContext context, WidgetRef ref, CourseModel course) {
+  Widget _buildContent(
+      BuildContext context, WidgetRef ref, CourseModel course) {
     final cohortsAsync = ref.watch(cohortsByCourseProvider(course.id));
     final seatStatusAsync = ref.watch(cohortSeatStatusProvider(course.id));
     final seatStatuses = {
@@ -120,7 +128,8 @@ class CourseDetailScreen extends ConsumerWidget {
         ),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_ios, color: AppColors.gold),
-          onPressed: () => context.canPop() ? context.pop() : context.go(AppRouter.courses),
+          onPressed: () =>
+              context.canPop() ? context.pop() : context.go(AppRouter.courses),
         ),
         actions: [
           OutlinedButton.icon(
@@ -128,10 +137,12 @@ class CourseDetailScreen extends ConsumerWidget {
               context: context,
               builder: (_) => CourseMaterialsDialog(course: course),
             ),
-            icon: const Icon(Icons.folder_open_outlined, size: 18, color: AppColors.gold),
+            icon: const Icon(Icons.folder_open_outlined,
+                size: 18, color: AppColors.gold),
             label: const Text(
               'مواد ومرفقات الكورس',
-              style: TextStyle(fontFamily: 'Cairo', fontSize: 13, color: AppColors.gold),
+              style: TextStyle(
+                  fontFamily: 'Cairo', fontSize: 13, color: AppColors.gold),
             ),
             style: OutlinedButton.styleFrom(
               side: const BorderSide(color: AppColors.gold),
@@ -158,7 +169,8 @@ class CourseDetailScreen extends ConsumerWidget {
               decoration: BoxDecoration(
                 color: AppColors.cardBg,
                 borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: AppColors.gold.withValues(alpha: 0.3)),
+                border:
+                    Border.all(color: AppColors.gold.withValues(alpha: 0.3)),
               ),
               child: Row(
                 children: [
@@ -279,7 +291,8 @@ class CourseDetailScreen extends ConsumerWidget {
     );
   }
 
-  void _showAddCohortDialog(BuildContext context, WidgetRef ref, CourseModel course) {
+  void _showAddCohortDialog(
+      BuildContext context, WidgetRef ref, CourseModel course) {
     showDialog(
       context: context,
       builder: (_) => _AddCohortDialog(
@@ -292,8 +305,8 @@ class CourseDetailScreen extends ConsumerWidget {
     );
   }
 
-  Future<void> _showEnrollDialog(
-      BuildContext context, WidgetRef ref, CohortModel cohort, CourseModel course) async {
+  Future<void> _showEnrollDialog(BuildContext context, WidgetRef ref,
+      CohortModel cohort, CourseModel course) async {
     final openWaitlist = await showDialog<bool>(
       context: context,
       builder: (_) => _EnrollTraineeDialog(
@@ -582,7 +595,9 @@ class _AddCohortDialogState extends ConsumerState<_AddCohortDialog> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(AppErrorHandler.friendlyMessage(e)), backgroundColor: AppColors.error),
+        SnackBar(
+            content: Text(AppErrorHandler.friendlyMessage(e)),
+            backgroundColor: AppColors.error),
       );
     } finally {
       if (mounted) setState(() => _loading = false);
@@ -786,6 +801,8 @@ class _EnrollTraineeDialogState extends ConsumerState<_EnrollTraineeDialog> {
   String? _selectedTraineeId;
   final _priceCtrl = TextEditingController();
   final _discountCtrl = TextEditingController(text: '0');
+  final _referralKey = GlobalKey<ReferralInputFieldsState>();
+  ReferralSelection _referral = const ReferralSelection();
   String _currency = 'SYP';
   bool _loading = false;
 
@@ -897,6 +914,56 @@ class _EnrollTraineeDialogState extends ConsumerState<_EnrollTraineeDialog> {
       return;
     }
 
+    final totalDue = double.tryParse(_priceCtrl.text) ?? widget.course.price;
+    final discountAmount = double.tryParse(_discountCtrl.text) ?? 0;
+    final referralCode = _referral.code;
+    final referralAmount = _referral.amount;
+
+    if (referralCode != null) {
+      if (!_referral.isVerified) {
+        final preview = await _referralKey.currentState?.verify();
+        if (!mounted) return;
+        if (preview == null || !preview.valid || !_referral.isVerified) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'تحقق من كود الإحالة أولاً',
+                style: TextStyle(fontFamily: 'Cairo'),
+              ),
+              backgroundColor: AppColors.error,
+            ),
+          );
+          return;
+        }
+      }
+
+      if (referralAmount <= 0) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'أدخل قيمة خصم الإحالة (أكبر من صفر)',
+              style: TextStyle(fontFamily: 'Cairo'),
+            ),
+            backgroundColor: AppColors.error,
+          ),
+        );
+        return;
+      }
+
+      if (referralAmount > totalDue - discountAmount) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'خصم الإحالة أكبر من المبلغ المتبقي بعد الخصم اليدوي',
+              style: TextStyle(fontFamily: 'Cairo'),
+            ),
+            backgroundColor: AppColors.error,
+          ),
+        );
+        return;
+      }
+    }
+
     setState(() => _loading = true);
     try {
       final repo = ref.read(coursesRepositoryProvider);
@@ -928,12 +995,14 @@ class _EnrollTraineeDialogState extends ConsumerState<_EnrollTraineeDialog> {
       }
 
       await repo.enrollTrainee(
-            traineeId: _selectedTraineeId!,
-            cohortId: widget.cohort.id,
-            totalDue: double.tryParse(_priceCtrl.text) ?? widget.course.price,
-            discountAmount: double.tryParse(_discountCtrl.text) ?? 0,
-            currency: _currency,
-          );
+        traineeId: _selectedTraineeId!,
+        cohortId: widget.cohort.id,
+        totalDue: totalDue,
+        discountAmount: discountAmount,
+        currency: _currency,
+        referralCode: referralCode,
+        referralDiscountAmount: referralAmount,
+      );
 
       if (!mounted) return;
       final messenger = ScaffoldMessenger.of(context);
@@ -956,7 +1025,9 @@ class _EnrollTraineeDialogState extends ConsumerState<_EnrollTraineeDialog> {
         return;
       }
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(AppErrorHandler.friendlyMessage(e)), backgroundColor: AppColors.error),
+        SnackBar(
+            content: Text(AppErrorHandler.friendlyMessage(e)),
+            backgroundColor: AppColors.error),
       );
     } finally {
       if (mounted) setState(() => _loading = false);
@@ -971,52 +1042,179 @@ class _EnrollTraineeDialogState extends ConsumerState<_EnrollTraineeDialog> {
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 480),
-        child: Padding(
-          padding: EdgeInsets.all(Responsive.spacing(context, 24)),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  const Icon(Icons.person_add, color: AppColors.gold),
-                  SizedBox(width: Responsive.spacing(context, 8)),
-                  Expanded(
-                    child: Text(
-                      'تسجيل متدرب — ${widget.cohort.name}',
-                      style: TextStyle(
-                        fontSize: Responsive.fontSize(context, 16),
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.gold,
-                        fontFamily: 'Cairo',
+        child: SingleChildScrollView(
+          child: Padding(
+            padding: EdgeInsets.all(Responsive.spacing(context, 24)),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    const Icon(Icons.person_add, color: AppColors.gold),
+                    SizedBox(width: Responsive.spacing(context, 8)),
+                    Expanded(
+                      child: Text(
+                        'تسجيل متدرب — ${widget.cohort.name}',
+                        style: TextStyle(
+                          fontSize: Responsive.fontSize(context, 16),
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.gold,
+                          fontFamily: 'Cairo',
+                        ),
                       ),
                     ),
-                  ),
-                  IconButton(
-                    icon:
-                        const Icon(Icons.close, color: AppColors.textSecondary),
-                    onPressed: () => Navigator.pop(context),
-                  ),
-                ],
-              ),
-              const Divider(color: AppColors.divider),
-              SizedBox(height: Responsive.spacing(context, 16)),
+                    IconButton(
+                      icon: const Icon(Icons.close,
+                          color: AppColors.textSecondary),
+                      onPressed: () => Navigator.pop(context),
+                    ),
+                  ],
+                ),
+                const Divider(color: AppColors.divider),
+                SizedBox(height: Responsive.spacing(context, 16)),
 
-              // Trainee Dropdown
-              traineesAsync.when(
-                loading: () =>
-                    const CircularProgressIndicator(color: AppColors.gold),
-                error: (e, _) => Text(AppErrorHandler.friendlyMessage(e),
-                    style: const TextStyle(color: AppColors.error)),
-                data: (trainees) => DropdownButtonFormField<String>(
-                  initialValue: _selectedTraineeId,
-                  dropdownColor: AppColors.cardBg,
+                // Trainee Dropdown
+                traineesAsync.when(
+                  loading: () =>
+                      const CircularProgressIndicator(color: AppColors.gold),
+                  error: (e, _) => Text(AppErrorHandler.friendlyMessage(e),
+                      style: const TextStyle(color: AppColors.error)),
+                  data: (trainees) => DropdownButtonFormField<String>(
+                    initialValue: _selectedTraineeId,
+                    dropdownColor: AppColors.cardBg,
+                    decoration: InputDecoration(
+                      labelText: 'اختر المتدرب *',
+                      labelStyle: const TextStyle(
+                          color: AppColors.textSecondary, fontFamily: 'Cairo'),
+                      prefixIcon: const Icon(Icons.person_outline,
+                          color: AppColors.gold),
+                      filled: true,
+                      fillColor: AppColors.surface,
+                      border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide:
+                              const BorderSide(color: AppColors.divider)),
+                      enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide:
+                              const BorderSide(color: AppColors.divider)),
+                      focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: const BorderSide(
+                              color: AppColors.gold, width: 2)),
+                    ),
+                    items: trainees.map((t) {
+                      return DropdownMenuItem(
+                        value: t.id,
+                        child: Text(
+                          t.fullName,
+                          style: const TextStyle(
+                              color: AppColors.textPrimary,
+                              fontFamily: 'Cairo'),
+                        ),
+                      );
+                    }).toList(),
+                    onChanged: (v) => setState(() => _selectedTraineeId = v),
+                  ),
+                ),
+
+                SizedBox(height: Responsive.spacing(context, 12)),
+
+                // Price + Currency
+                Row(
+                  children: [
+                    Expanded(
+                      flex: 2,
+                      child: TextField(
+                        controller: _priceCtrl,
+                        keyboardType: TextInputType.number,
+                        style: const TextStyle(color: AppColors.textPrimary),
+                        decoration: InputDecoration(
+                          labelText: 'السعر *',
+                          labelStyle: const TextStyle(
+                              color: AppColors.textSecondary,
+                              fontFamily: 'Cairo'),
+                          prefixIcon: const Icon(Icons.attach_money,
+                              color: AppColors.gold),
+                          filled: true,
+                          fillColor: AppColors.surface,
+                          border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              borderSide:
+                                  const BorderSide(color: AppColors.divider)),
+                          enabledBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              borderSide:
+                                  const BorderSide(color: AppColors.divider)),
+                          focusedBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              borderSide: const BorderSide(
+                                  color: AppColors.gold, width: 2)),
+                        ),
+                      ),
+                    ),
+                    SizedBox(width: Responsive.spacing(context, 12)),
+                    Expanded(
+                      child: DropdownButtonFormField<String>(
+                        initialValue: _currency,
+                        dropdownColor: AppColors.cardBg,
+                        decoration: InputDecoration(
+                          labelText: 'العملة',
+                          labelStyle: const TextStyle(
+                              color: AppColors.textSecondary,
+                              fontFamily: 'Cairo'),
+                          filled: true,
+                          fillColor: AppColors.surface,
+                          border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              borderSide:
+                                  const BorderSide(color: AppColors.divider)),
+                          enabledBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              borderSide:
+                                  const BorderSide(color: AppColors.divider)),
+                          focusedBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              borderSide: const BorderSide(
+                                  color: AppColors.gold, width: 2)),
+                        ),
+                        items: const [
+                          DropdownMenuItem(
+                            value: 'SYP',
+                            child: Text('ل.س',
+                                style: TextStyle(
+                                    color: AppColors.textPrimary,
+                                    fontFamily: 'Cairo')),
+                          ),
+                          DropdownMenuItem(
+                            value: 'USD',
+                            child: Text('\$',
+                                style: TextStyle(
+                                    color: AppColors.textPrimary,
+                                    fontFamily: 'Cairo')),
+                          ),
+                        ],
+                        onChanged: (v) =>
+                            setState(() => _currency = v ?? 'SYP'),
+                      ),
+                    ),
+                  ],
+                ),
+
+                SizedBox(height: Responsive.spacing(context, 12)),
+
+                // Discount
+                TextField(
+                  controller: _discountCtrl,
+                  keyboardType: TextInputType.number,
+                  style: const TextStyle(color: AppColors.textPrimary),
                   decoration: InputDecoration(
-                    labelText: 'اختر المتدرب *',
+                    labelText: 'الخصم (اختياري)',
                     labelStyle: const TextStyle(
                         color: AppColors.textSecondary, fontFamily: 'Cairo'),
-                    prefixIcon:
-                        const Icon(Icons.person_outline, color: AppColors.gold),
+                    prefixIcon: const Icon(Icons.discount_outlined,
+                        color: AppColors.gold),
                     filled: true,
                     fillColor: AppColors.surface,
                     border: OutlineInputBorder(
@@ -1030,172 +1228,60 @@ class _EnrollTraineeDialogState extends ConsumerState<_EnrollTraineeDialog> {
                         borderSide:
                             const BorderSide(color: AppColors.gold, width: 2)),
                   ),
-                  items: trainees.map((t) {
-                    return DropdownMenuItem(
-                      value: t.id,
-                      child: Text(
-                        t.fullName,
-                        style: const TextStyle(
-                            color: AppColors.textPrimary, fontFamily: 'Cairo'),
-                      ),
-                    );
-                  }).toList(),
-                  onChanged: (v) => setState(() => _selectedTraineeId = v),
                 ),
-              ),
 
-              SizedBox(height: Responsive.spacing(context, 12)),
+                SizedBox(height: Responsive.spacing(context, 12)),
 
-              // Price + Currency
-              Row(
-                children: [
-                  Expanded(
-                    flex: 2,
-                    child: TextField(
-                      controller: _priceCtrl,
-                      keyboardType: TextInputType.number,
-                      style: const TextStyle(color: AppColors.textPrimary),
-                      decoration: InputDecoration(
-                        labelText: 'السعر *',
-                        labelStyle: const TextStyle(
-                            color: AppColors.textSecondary,
-                            fontFamily: 'Cairo'),
-                        prefixIcon: const Icon(Icons.attach_money,
-                            color: AppColors.gold),
-                        filled: true,
-                        fillColor: AppColors.surface,
-                        border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide:
-                                const BorderSide(color: AppColors.divider)),
-                        enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide:
-                                const BorderSide(color: AppColors.divider)),
-                        focusedBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide: const BorderSide(
-                                color: AppColors.gold, width: 2)),
-                      ),
-                    ),
-                  ),
-                  SizedBox(width: Responsive.spacing(context, 12)),
-                  Expanded(
-                    child: DropdownButtonFormField<String>(
-                      initialValue: _currency,
-                      dropdownColor: AppColors.cardBg,
-                      decoration: InputDecoration(
-                        labelText: 'العملة',
-                        labelStyle: const TextStyle(
-                            color: AppColors.textSecondary,
-                            fontFamily: 'Cairo'),
-                        filled: true,
-                        fillColor: AppColors.surface,
-                        border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide:
-                                const BorderSide(color: AppColors.divider)),
-                        enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide:
-                                const BorderSide(color: AppColors.divider)),
-                        focusedBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide: const BorderSide(
-                                color: AppColors.gold, width: 2)),
-                      ),
-                      items: const [
-                        DropdownMenuItem(
-                          value: 'SYP',
-                          child: Text('ل.س',
-                              style: TextStyle(
-                                  color: AppColors.textPrimary,
-                                  fontFamily: 'Cairo')),
-                        ),
-                        DropdownMenuItem(
-                          value: 'USD',
-                          child: Text('\$',
-                              style: TextStyle(
-                                  color: AppColors.textPrimary,
-                                  fontFamily: 'Cairo')),
-                        ),
-                      ],
-                      onChanged: (v) => setState(() => _currency = v ?? 'SYP'),
-                    ),
-                  ),
-                ],
-              ),
-
-              SizedBox(height: Responsive.spacing(context, 12)),
-
-              // Discount
-              TextField(
-                controller: _discountCtrl,
-                keyboardType: TextInputType.number,
-                style: const TextStyle(color: AppColors.textPrimary),
-                decoration: InputDecoration(
-                  labelText: 'الخصم (اختياري)',
-                  labelStyle: const TextStyle(
-                      color: AppColors.textSecondary, fontFamily: 'Cairo'),
-                  prefixIcon: const Icon(Icons.discount_outlined,
-                      color: AppColors.gold),
-                  filled: true,
-                  fillColor: AppColors.surface,
-                  border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: const BorderSide(color: AppColors.divider)),
-                  enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: const BorderSide(color: AppColors.divider)),
-                  focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide:
-                          const BorderSide(color: AppColors.gold, width: 2)),
+                ReferralInputFields(
+                  key: _referralKey,
+                  currency: _currency,
+                  onChanged: (selection) {
+                    if (mounted) setState(() => _referral = selection);
+                  },
                 ),
-              ),
 
-              SizedBox(height: Responsive.spacing(context, 24)),
+                SizedBox(height: Responsive.spacing(context, 24)),
 
-              Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton(
-                      onPressed: () => Navigator.pop(context),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: AppColors.textSecondary,
-                        side: const BorderSide(color: AppColors.divider),
-                        shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12)),
-                        padding: const EdgeInsets.symmetric(vertical: 14),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: () => Navigator.pop(context),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: AppColors.textSecondary,
+                          side: const BorderSide(color: AppColors.divider),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12)),
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                        ),
+                        child: const Text('إلغاء',
+                            style: TextStyle(fontFamily: 'Cairo')),
                       ),
-                      child: const Text('إلغاء',
-                          style: TextStyle(fontFamily: 'Cairo')),
                     ),
-                  ),
-                  SizedBox(width: Responsive.spacing(context, 12)),
-                  Expanded(
-                    child: ElevatedButton(
-                      onPressed: _loading ? null : _submit,
-                      child: _loading
-                          ? const SizedBox(
-                              height: 20,
-                              width: 20,
-                              child: CircularProgressIndicator(
-                                  color: Colors.black, strokeWidth: 2))
-                          : const Text('تسجيل',
-                              style: TextStyle(fontFamily: 'Cairo')),
+                    SizedBox(width: Responsive.spacing(context, 12)),
+                    Expanded(
+                      child: ElevatedButton(
+                        onPressed: _loading ? null : _submit,
+                        child: _loading
+                            ? const SizedBox(
+                                height: 20,
+                                width: 20,
+                                child: CircularProgressIndicator(
+                                    color: Colors.black, strokeWidth: 2))
+                            : const Text('تسجيل',
+                                style: TextStyle(fontFamily: 'Cairo')),
+                      ),
                     ),
-                  ),
-                ],
-              ),
-            ],
+                  ],
+                ),
+              ],
+            ),
           ),
         ),
       ),
     );
   }
 }
-
 
 // ─── Shift Cohort Sessions Dialog (Phase 7) ──────────────────────────────────
 class _ShiftCohortSessionsDialog extends ConsumerStatefulWidget {
@@ -1298,7 +1384,8 @@ class _ShiftCohortSessionsDialogState
         widget.onShifted();
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(res['message']?.toString() ?? 'تمت إزاحة الجلسات بنجاح ✓',
+            content: Text(
+                res['message']?.toString() ?? 'تمت إزاحة الجلسات بنجاح ✓',
                 style: const TextStyle(fontFamily: 'Cairo')),
             backgroundColor: AppColors.success,
           ),
@@ -1328,7 +1415,8 @@ class _ShiftCohortSessionsDialogState
 
   @override
   Widget build(BuildContext context) {
-    final timeStr = '${_newTime.hour.toString().padLeft(2, '0')}:${_newTime.minute.toString().padLeft(2, '0')}';
+    final timeStr =
+        '${_newTime.hour.toString().padLeft(2, '0')}:${_newTime.minute.toString().padLeft(2, '0')}';
     final dateStr = AppFormatters.dateOnly.format(_newDate);
 
     return Dialog(
@@ -1358,25 +1446,27 @@ class _ShiftCohortSessionsDialogState
                     ),
                   ),
                   IconButton(
-                    icon: const Icon(Icons.close, color: AppColors.textSecondary),
+                    icon:
+                        const Icon(Icons.close, color: AppColors.textSecondary),
                     onPressed: () => Navigator.pop(context),
                   ),
                 ],
               ),
               const Divider(color: AppColors.divider),
               SizedBox(height: Responsive.spacing(context, 12)),
-
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
                   color: AppColors.warning.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: AppColors.warning.withValues(alpha: 0.3)),
+                  border: Border.all(
+                      color: AppColors.warning.withValues(alpha: 0.3)),
                 ),
                 child: const Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Icon(Icons.info_outline, color: AppColors.warning, size: 20),
+                    Icon(Icons.info_outline,
+                        color: AppColors.warning, size: 20),
                     SizedBox(width: 8),
                     Expanded(
                       child: Text(
@@ -1393,7 +1483,6 @@ class _ShiftCohortSessionsDialogState
                 ),
               ),
               SizedBox(height: Responsive.spacing(context, 16)),
-
               Text(
                 'تاريخ ووقت البداية الجديد للجلسات المجدولة:',
                 style: TextStyle(
@@ -1403,7 +1492,6 @@ class _ShiftCohortSessionsDialogState
                 ),
               ),
               SizedBox(height: Responsive.spacing(context, 8)),
-
               Row(
                 children: [
                   Expanded(
@@ -1411,7 +1499,8 @@ class _ShiftCohortSessionsDialogState
                       onTap: _pickDate,
                       borderRadius: BorderRadius.circular(12),
                       child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 14, vertical: 12),
                         decoration: BoxDecoration(
                           color: AppColors.surface,
                           borderRadius: BorderRadius.circular(12),
@@ -1419,9 +1508,13 @@ class _ShiftCohortSessionsDialogState
                         ),
                         child: Row(
                           children: [
-                            const Icon(Icons.calendar_today, size: 16, color: AppColors.gold),
+                            const Icon(Icons.calendar_today,
+                                size: 16, color: AppColors.gold),
                             const SizedBox(width: 8),
-                            Text(dateStr, style: const TextStyle(color: AppColors.textPrimary, fontFamily: 'Cairo')),
+                            Text(dateStr,
+                                style: const TextStyle(
+                                    color: AppColors.textPrimary,
+                                    fontFamily: 'Cairo')),
                           ],
                         ),
                       ),
@@ -1433,7 +1526,8 @@ class _ShiftCohortSessionsDialogState
                       onTap: _pickTime,
                       borderRadius: BorderRadius.circular(12),
                       child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 14, vertical: 12),
                         decoration: BoxDecoration(
                           color: AppColors.surface,
                           borderRadius: BorderRadius.circular(12),
@@ -1441,9 +1535,13 @@ class _ShiftCohortSessionsDialogState
                         ),
                         child: Row(
                           children: [
-                            const Icon(Icons.access_time, size: 16, color: AppColors.gold),
+                            const Icon(Icons.access_time,
+                                size: 16, color: AppColors.gold),
                             const SizedBox(width: 8),
-                            Text(timeStr, style: const TextStyle(color: AppColors.textPrimary, fontFamily: 'Cairo')),
+                            Text(timeStr,
+                                style: const TextStyle(
+                                    color: AppColors.textPrimary,
+                                    fontFamily: 'Cairo')),
                           ],
                         ),
                       ),
@@ -1452,7 +1550,6 @@ class _ShiftCohortSessionsDialogState
                 ],
               ),
               SizedBox(height: Responsive.spacing(context, 24)),
-
               Row(
                 children: [
                   Expanded(
@@ -1461,20 +1558,31 @@ class _ShiftCohortSessionsDialogState
                       style: OutlinedButton.styleFrom(
                         foregroundColor: AppColors.textSecondary,
                         side: const BorderSide(color: AppColors.divider),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12)),
                         padding: const EdgeInsets.symmetric(vertical: 14),
                       ),
-                      child: const Text('إلغاء', style: TextStyle(fontFamily: 'Cairo')),
+                      child: const Text('إلغاء',
+                          style: TextStyle(fontFamily: 'Cairo')),
                     ),
                   ),
                   SizedBox(width: Responsive.spacing(context, 12)),
                   Expanded(
                     child: ElevatedButton.icon(
                       onPressed: _loading ? null : _submit,
-                      icon: _loading ? const SizedBox.shrink() : const Icon(Icons.check, size: 18),
+                      icon: _loading
+                          ? const SizedBox.shrink()
+                          : const Icon(Icons.check, size: 18),
                       label: _loading
-                          ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(color: Colors.black, strokeWidth: 2))
-                          : const Text('تطبيق الإزاحة', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold)),
+                          ? const SizedBox(
+                              height: 20,
+                              width: 20,
+                              child: CircularProgressIndicator(
+                                  color: Colors.black, strokeWidth: 2))
+                          : const Text('تطبيق الإزاحة',
+                              style: TextStyle(
+                                  fontFamily: 'Cairo',
+                                  fontWeight: FontWeight.bold)),
                     ),
                   ),
                 ],
@@ -1486,7 +1594,6 @@ class _ShiftCohortSessionsDialogState
     );
   }
 }
-
 
 // ─── Phase 8: Bulk Schedule Sessions Dialog ───
 class _BulkScheduleSessionsDialog extends ConsumerStatefulWidget {
@@ -1562,20 +1669,20 @@ class _BulkScheduleSessionsDialogState
     }
 
     final duration = int.tryParse(_durationCtrl.text.trim()) ?? 120;
-    final timeStr = '${_startTime.hour.toString().padLeft(2, '0')}:${_startTime.minute.toString().padLeft(2, '0')}:00';
+    final timeStr =
+        '${_startTime.hour.toString().padLeft(2, '0')}:${_startTime.minute.toString().padLeft(2, '0')}:00';
 
     setState(() => _loading = true);
     try {
-      final res = await ref
-          .read(adminSessionsRepositoryProvider)
-          .bulkScheduleSessions(
-            cohortId: widget.cohort.id,
-            startDate: _startDate,
-            startTime: timeStr,
-            daysOfWeek: _selectedDays.toList(),
-            sessionCount: count,
-            durationMinutes: duration,
-          );
+      final res =
+          await ref.read(adminSessionsRepositoryProvider).bulkScheduleSessions(
+                cohortId: widget.cohort.id,
+                startDate: _startDate,
+                startTime: timeStr,
+                daysOfWeek: _selectedDays.toList(),
+                sessionCount: count,
+                durationMinutes: duration,
+              );
 
       if (!mounted) return;
       Navigator.pop(context);
@@ -1618,7 +1725,8 @@ class _BulkScheduleSessionsDialogState
               children: [
                 Row(
                   children: [
-                    const Icon(Icons.playlist_add, color: AppColors.gold, size: 26),
+                    const Icon(Icons.playlist_add,
+                        color: AppColors.gold, size: 26),
                     SizedBox(width: Responsive.spacing(context, 8)),
                     Expanded(
                       child: Text(
@@ -1632,7 +1740,8 @@ class _BulkScheduleSessionsDialogState
                       ),
                     ),
                     IconButton(
-                      icon: const Icon(Icons.close, color: AppColors.textSecondary),
+                      icon: const Icon(Icons.close,
+                          color: AppColors.textSecondary),
                       onPressed: () => Navigator.pop(context),
                     ),
                   ],
@@ -1673,11 +1782,13 @@ class _BulkScheduleSessionsDialogState
                     ),
                     child: Row(
                       children: [
-                        const Icon(Icons.calendar_today, color: AppColors.gold, size: 18),
+                        const Icon(Icons.calendar_today,
+                            color: AppColors.gold, size: 18),
                         SizedBox(width: Responsive.spacing(context, 8)),
                         Text(AppFormatters.dateOnly.format(_startDate),
                             style: const TextStyle(
-                                color: AppColors.textPrimary, fontFamily: 'Cairo')),
+                                color: AppColors.textPrimary,
+                                fontFamily: 'Cairo')),
                       ],
                     ),
                   ),
@@ -1709,11 +1820,13 @@ class _BulkScheduleSessionsDialogState
                     ),
                     child: Row(
                       children: [
-                        const Icon(Icons.access_time, color: AppColors.gold, size: 18),
+                        const Icon(Icons.access_time,
+                            color: AppColors.gold, size: 18),
                         SizedBox(width: Responsive.spacing(context, 8)),
                         Text(_startTime.format(context),
                             style: const TextStyle(
-                                color: AppColors.textPrimary, fontFamily: 'Cairo')),
+                                color: AppColors.textPrimary,
+                                fontFamily: 'Cairo')),
                       ],
                     ),
                   ),
@@ -1738,8 +1851,12 @@ class _BulkScheduleSessionsDialogState
                           style: TextStyle(
                             fontFamily: 'Cairo',
                             fontSize: 12,
-                            fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                            color: isSelected ? Colors.black : AppColors.textPrimary,
+                            fontWeight: isSelected
+                                ? FontWeight.bold
+                                : FontWeight.normal,
+                            color: isSelected
+                                ? Colors.black
+                                : AppColors.textPrimary,
                           )),
                       selected: isSelected,
                       selectedColor: AppColors.gold,
@@ -1776,14 +1893,17 @@ class _BulkScheduleSessionsDialogState
                           TextField(
                             controller: _sessionCountCtrl,
                             keyboardType: TextInputType.number,
-                            style: const TextStyle(color: AppColors.textPrimary),
+                            style:
+                                const TextStyle(color: AppColors.textPrimary),
                             decoration: InputDecoration(
                               filled: true,
                               fillColor: AppColors.surface,
-                              prefixIcon: const Icon(Icons.numbers, color: AppColors.gold, size: 18),
+                              prefixIcon: const Icon(Icons.numbers,
+                                  color: AppColors.gold, size: 18),
                               border: OutlineInputBorder(
                                 borderRadius: BorderRadius.circular(10),
-                                borderSide: const BorderSide(color: AppColors.divider),
+                                borderSide:
+                                    const BorderSide(color: AppColors.divider),
                               ),
                             ),
                           ),
@@ -1804,14 +1924,17 @@ class _BulkScheduleSessionsDialogState
                           TextField(
                             controller: _durationCtrl,
                             keyboardType: TextInputType.number,
-                            style: const TextStyle(color: AppColors.textPrimary),
+                            style:
+                                const TextStyle(color: AppColors.textPrimary),
                             decoration: InputDecoration(
                               filled: true,
                               fillColor: AppColors.surface,
-                              prefixIcon: const Icon(Icons.timer_outlined, color: AppColors.gold, size: 18),
+                              prefixIcon: const Icon(Icons.timer_outlined,
+                                  color: AppColors.gold, size: 18),
                               border: OutlineInputBorder(
                                 borderRadius: BorderRadius.circular(10),
-                                borderSide: const BorderSide(color: AppColors.divider),
+                                borderSide:
+                                    const BorderSide(color: AppColors.divider),
                               ),
                             ),
                           ),

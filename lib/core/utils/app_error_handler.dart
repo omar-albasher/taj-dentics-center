@@ -26,13 +26,26 @@ class AppErrorHandler {
         'بيانات الترقية غير مكتملة (وقت الترقية والمسؤول)',
     'WAITLIST_IDENTITY_IMMUTABLE': 'لا يمكن تعديل هوية طلب الانتظار',
     'WAITLIST_INITIAL_STATUS_INVALID': 'حالة طلب الانتظار الأولية غير صالحة',
-    'INVALID_WAITLIST_TRANSITION': 'لا يمكن تنفيذ هذا الانتقال على طلب الانتظار',
+    'INVALID_WAITLIST_TRANSITION':
+        'لا يمكن تنفيذ هذا الانتقال على طلب الانتظار',
     'ADMIN_ONLY': 'هذه العملية مخصصة للإدارة فقط',
     'NOT_AUTHORIZED': 'ليس لديك الصلاحيات الكافية لتنفيذ هذا الإجراء',
     'AUTH_REQUIRED': 'انتهت صلاحية الجلسة، يرجى تسجيل الدخول مجدداً',
     'INVALID_TOTAL_DUE': 'قيمة المبلغ المطلوب غير صالحة',
     'INVALID_DISCOUNT': 'قيمة الخصم غير صالحة',
     'INVALID_CURRENCY': 'العملة غير مدعومة — استخدم SYP أو USD',
+    'REFERRAL_CODE_INVALID': 'كود الإحالة غير صحيح',
+    'REFERRAL_REFERRER_INACTIVE': 'حساب صاحب كود الإحالة غير مفعّل',
+    'REFERRAL_SELF': 'لا يمكن استخدام كود الإحالة الخاص بالمتدرب نفسه',
+    'REFERRAL_REFEREE_ENROLLED':
+        'المتدرب مسجل حالياً في دورة من نفس نوع هذه الدورة — لا يمكن تطبيق الإحالة',
+    'REFERRAL_ALREADY_REFERRED':
+        'تم استخدام كود إحالة لهذا المتدرب في هذه الدورة مسبقاً',
+    'REFERRAL_MUTUAL': 'لا يمكن تبادل الإحالة بين المتدربين في الدورة نفسها',
+    'REFERRAL_NOTHING_DUE': 'لا يوجد مبلغ مستحق بعد الخصم لتطبيق خصم الإحالة',
+    'REFERRAL_DISCOUNT_TOO_HIGH':
+        'قيمة خصم الإحالة أكبر من المبلغ المتبقي بعد الخصم اليدوي',
+    'REFERRAL_DISCOUNT_INVALID': 'قيمة خصم الإحالة غير صالحة',
   };
 
   /// Converts any technical or database exception into a clear, user-friendly Arabic message.
@@ -79,7 +92,8 @@ class AppErrorHandler {
 
     // If an application exception was already thrown with friendly Arabic text (e.g. Exception('غير مصرح'))
     if (_containsArabic(rawString)) {
-      final cleaned = rawString.replaceAll(RegExp(r'^Exception:\s*'), '').trim();
+      final cleaned =
+          rawString.replaceAll(RegExp(r'^Exception:\s*'), '').trim();
       if (cleaned.isNotEmpty && !cleaned.contains('PostgrestException')) {
         return cleaned;
       }
@@ -98,6 +112,9 @@ class AppErrorHandler {
     // Specific PostgreSQL error codes
     switch (code) {
       case '23505': // unique_violation
+        if (msg.contains('uq_trainees_trainee_code')) {
+          return 'كود المتدرب مستخدم لمتدرب آخر — اختر كوداً مختلفاً';
+        }
         if (msg.contains('attendance')) {
           return 'تم تسجيل حضور هذا المتدرب في هذه الجلسة مسبقاً';
         }
@@ -143,13 +160,15 @@ class AppErrorHandler {
   static String _handleAuthException(AuthException e) {
     final msg = e.message.toLowerCase();
 
-    if (msg.contains('invalid login credentials') || msg.contains('invalid_grant')) {
+    if (msg.contains('invalid login credentials') ||
+        msg.contains('invalid_grant')) {
       return 'بيانات تسجيل الدخول غير صحيحة، يرجى التأكد من البريد وكلمة المرور';
     }
     if (msg.contains('email not confirmed')) {
       return 'يرجى تأكيد الحساب عبر البريد الإلكتروني أولاً';
     }
-    if (msg.contains('user already registered') || msg.contains('already exists')) {
+    if (msg.contains('user already registered') ||
+        msg.contains('already exists')) {
       return 'البريد الإلكتروني مسجل بالفعل لمستخدم آخر';
     }
     if (msg.contains('password should be at least')) {

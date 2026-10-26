@@ -7,8 +7,10 @@ import 'package:go_router/go_router.dart';
 import '../../../core/utils/app_formatters.dart';
 import 'package:admin_dashboard/core/widgets/app_error_widget.dart';
 import '../../../core/constants/app_colors.dart';
+import '../../../core/utils/app_error_handler.dart';
 import '../../../core/utils/responsive.dart';
 import '../data/trainees_repository.dart';
+import '../domain/referral_models.dart';
 import '../domain/trainee_model.dart';
 import 'enroll_in_course_dialog.dart';
 
@@ -57,7 +59,8 @@ class TraineeProfileScreen extends ConsumerWidget {
     final trainee = traineeAsync.value!;
     final data = profileAsync.value ?? <String, dynamic>{};
 
-    final traineeName = trainee.fullName.isNotEmpty ? trainee.fullName : 'ملف المتدرب';
+    final traineeName =
+        trainee.fullName.isNotEmpty ? trainee.fullName : 'ملف المتدرب';
     final financial = List<Map<String, dynamic>>.from(data['financial'] ?? []);
     final progress = List<Map<String, dynamic>>.from(data['progress'] ?? []);
     final payments = List<Map<String, dynamic>>.from(data['payments'] ?? []);
@@ -83,7 +86,8 @@ class TraineeProfileScreen extends ConsumerWidget {
                 decoration: BoxDecoration(
                   color: AppColors.gold.withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: AppColors.gold.withValues(alpha: 0.5)),
+                  border:
+                      Border.all(color: AppColors.gold.withValues(alpha: 0.5)),
                 ),
                 child: Text(
                   trainee.traineeCode!,
@@ -103,7 +107,8 @@ class TraineeProfileScreen extends ConsumerWidget {
           onPressed: () => context.pop(),
         ),
         actions: [
-          if (trainee.whatsappNumber != null && PhoneUtils.sanitizePhone(trainee.whatsappNumber) != null)
+          if (trainee.whatsappNumber != null &&
+              PhoneUtils.sanitizePhone(trainee.whatsappNumber) != null)
             IconButton(
               tooltip: 'مراسلة عبر واتساب',
               icon: const Icon(Icons.chat_outlined, color: Color(0xFF25D366)),
@@ -153,17 +158,27 @@ class TraineeProfileScreen extends ConsumerWidget {
               child: Column(
                 children: [
                   if (trainee.traineeCode != null)
-                    _InfoRow(label: 'كود المتدرب الفريد', value: trainee.traineeCode!, isLtr: true, valueColor: AppColors.gold),
+                    _InfoRow(
+                        label: 'كود المتدرب الفريد',
+                        value: trainee.traineeCode!,
+                        isLtr: true,
+                        valueColor: AppColors.gold),
                   _InfoRow(label: 'الاسم بالعربي', value: trainee.fullName),
-                  if (trainee.fullNameEn != null && trainee.fullNameEn!.isNotEmpty)
+                  if (trainee.fullNameEn != null &&
+                      trainee.fullNameEn!.isNotEmpty)
                     _InfoRow(
                       label: 'الاسم بالإنكليزي (جواز السفر)',
                       value: trainee.fullNameEn!,
                       isLtr: true,
                     ),
-                  _InfoRow(label: 'البريد الإلكتروني', value: trainee.email, isLtr: true),
-                  _InfoRow(label: 'رقم الجوال', value: trainee.phone, isLtr: true),
-                  if (trainee.whatsappNumber != null && trainee.whatsappNumber!.isNotEmpty)
+                  _InfoRow(
+                      label: 'البريد الإلكتروني',
+                      value: trainee.email,
+                      isLtr: true),
+                  _InfoRow(
+                      label: 'رقم الجوال', value: trainee.phone, isLtr: true),
+                  if (trainee.whatsappNumber != null &&
+                      trainee.whatsappNumber!.isNotEmpty)
                     _InfoRow(
                       label: 'رقم الواتساب',
                       value: trainee.whatsappNumber!,
@@ -185,14 +200,19 @@ class TraineeProfileScreen extends ConsumerWidget {
                   _InfoRow(
                     label: 'حالة الحساب',
                     value: trainee.isActive ? 'نشط' : 'غير نشط',
-                    valueColor: trainee.isActive ? AppColors.success : AppColors.error,
+                    valueColor:
+                        trainee.isActive ? AppColors.success : AppColors.error,
                   ),
                 ],
               ),
             ),
             SizedBox(height: Responsive.spacing(context, 16)),
 
-            // 2. Academic Information
+            // 2. Referrals
+            _ReferralSection(traineeId: traineeId),
+            SizedBox(height: Responsive.spacing(context, 16)),
+
+            // 3. Academic Information
             _SectionCard(
               title: 'المعلومات الأكاديمية',
               icon: Icons.school_outlined,
@@ -200,13 +220,15 @@ class TraineeProfileScreen extends ConsumerWidget {
                 children: [
                   _InfoRow(
                     label: 'اسم الجامعة أو المعهد',
-                    value: (trainee.university != null && trainee.university!.isNotEmpty)
+                    value: (trainee.university != null &&
+                            trainee.university!.isNotEmpty)
                         ? trainee.university!
                         : 'غير محدد',
                   ),
                   _InfoRow(
                     label: 'السنة الدراسية',
-                    value: (trainee.academicYear != null && trainee.academicYear!.isNotEmpty)
+                    value: (trainee.academicYear != null &&
+                            trainee.academicYear!.isNotEmpty)
                         ? trainee.academicYear!
                         : 'غير محدد',
                   ),
@@ -216,8 +238,10 @@ class TraineeProfileScreen extends ConsumerWidget {
             SizedBox(height: Responsive.spacing(context, 16)),
 
             // 3. Behavioral and Academic Notes
-            if ((trainee.behavioralNotes != null && trainee.behavioralNotes!.isNotEmpty) ||
-                (trainee.academicNotes != null && trainee.academicNotes!.isNotEmpty) ||
+            if ((trainee.behavioralNotes != null &&
+                    trainee.behavioralNotes!.isNotEmpty) ||
+                (trainee.academicNotes != null &&
+                    trainee.academicNotes!.isNotEmpty) ||
                 (trainee.notes != null && trainee.notes!.isNotEmpty)) ...[
               _SectionCard(
                 title: 'ملاحظات وتقييم المتدرب',
@@ -225,13 +249,15 @@ class TraineeProfileScreen extends ConsumerWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    if (trainee.behavioralNotes != null && trainee.behavioralNotes!.isNotEmpty)
+                    if (trainee.behavioralNotes != null &&
+                        trainee.behavioralNotes!.isNotEmpty)
                       _NoteBlock(
                         title: 'ملاحظات سلوكية عن المتدرب',
                         content: trainee.behavioralNotes!,
                         icon: Icons.psychology_outlined,
                       ),
-                    if (trainee.academicNotes != null && trainee.academicNotes!.isNotEmpty)
+                    if (trainee.academicNotes != null &&
+                        trainee.academicNotes!.isNotEmpty)
                       _NoteBlock(
                         title: 'ملاحظات أكاديمية عن المتدرب',
                         content: trainee.academicNotes!,
@@ -417,14 +443,16 @@ class _EditTraineeDialogState extends ConsumerState<_EditTraineeDialog> {
     super.initState();
     final trainee = widget.trainee;
     _codeCtrl = TextEditingController(text: trainee.traineeCode ?? '');
-    _nameArCtrl = TextEditingController(text: trainee.fullNameAr ?? trainee.fullName);
+    _nameArCtrl =
+        TextEditingController(text: trainee.fullNameAr ?? trainee.fullName);
     _nameEnCtrl = TextEditingController(text: trainee.fullNameEn ?? '');
     _whatsappCtrl = TextEditingController(text: trainee.whatsapp);
     _universityCtrl = TextEditingController(text: trainee.university ?? '');
     _academicYearCtrl = TextEditingController(text: trainee.academicYear ?? '');
     _provinceCtrl = TextEditingController(text: trainee.province);
     _addressCtrl = TextEditingController(text: trainee.address);
-    _behavioralCtrl = TextEditingController(text: trainee.behavioralNotes ?? '');
+    _behavioralCtrl =
+        TextEditingController(text: trainee.behavioralNotes ?? '');
     _academicCtrl = TextEditingController(text: trainee.academicNotes ?? '');
     _selectedBatchDate = trainee.batchDate;
   }
@@ -456,15 +484,25 @@ class _EditTraineeDialogState extends ConsumerState<_EditTraineeDialog> {
         controller: controller,
         maxLines: maxLines,
         textDirection: isLtr ? TextDirection.ltr : TextDirection.rtl,
-        style: const TextStyle(color: AppColors.textPrimary, fontFamily: 'Cairo'),
+        style:
+            const TextStyle(color: AppColors.textPrimary, fontFamily: 'Cairo'),
         decoration: InputDecoration(
           labelText: label,
-          labelStyle: const TextStyle(color: AppColors.textSecondary, fontFamily: 'Cairo', fontSize: 13),
+          labelStyle: const TextStyle(
+              color: AppColors.textSecondary,
+              fontFamily: 'Cairo',
+              fontSize: 13),
           filled: true,
           fillColor: AppColors.surface,
-          border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: AppColors.divider)),
-          enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: AppColors.divider)),
-          focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: AppColors.gold, width: 1.5)),
+          border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+              borderSide: const BorderSide(color: AppColors.divider)),
+          enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+              borderSide: const BorderSide(color: AppColors.divider)),
+          focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+              borderSide: const BorderSide(color: AppColors.gold, width: 1.5)),
         ),
       ),
     );
@@ -495,16 +533,34 @@ class _EditTraineeDialogState extends ConsumerState<_EditTraineeDialog> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              _dialogField(controller: _codeCtrl, label: 'كود المتدرب الفريد (T10001)', isLtr: true),
-              _dialogField(controller: _nameArCtrl, label: 'الاسم بالعربي (جواز السفر)'),
-              _dialogField(controller: _nameEnCtrl, label: 'الاسم بالإنكليزي (جواز السفر)', isLtr: true),
-              _dialogField(controller: _whatsappCtrl, label: 'رقم الواتساب', isLtr: true),
-              _dialogField(controller: _universityCtrl, label: 'اسم الجامعة أو المعهد'),
-              _dialogField(controller: _academicYearCtrl, label: 'السنة الدراسية'),
+              _dialogField(
+                  controller: _codeCtrl,
+                  label: 'كود المتدرب الفريد (T10001)',
+                  isLtr: true),
+              _dialogField(
+                  controller: _nameArCtrl, label: 'الاسم بالعربي (جواز السفر)'),
+              _dialogField(
+                  controller: _nameEnCtrl,
+                  label: 'الاسم بالإنكليزي (جواز السفر)',
+                  isLtr: true),
+              _dialogField(
+                  controller: _whatsappCtrl,
+                  label: 'رقم الواتساب',
+                  isLtr: true),
+              _dialogField(
+                  controller: _universityCtrl, label: 'اسم الجامعة أو المعهد'),
+              _dialogField(
+                  controller: _academicYearCtrl, label: 'السنة الدراسية'),
               _dialogField(controller: _provinceCtrl, label: 'المحافظة'),
               _dialogField(controller: _addressCtrl, label: 'عنوان السكن'),
-              _dialogField(controller: _behavioralCtrl, label: 'ملاحظات سلوكية عن المتدرب', maxLines: 2),
-              _dialogField(controller: _academicCtrl, label: 'ملاحظات أكاديمية عن المتدرب', maxLines: 2),
+              _dialogField(
+                  controller: _behavioralCtrl,
+                  label: 'ملاحظات سلوكية عن المتدرب',
+                  maxLines: 2),
+              _dialogField(
+                  controller: _academicCtrl,
+                  label: 'ملاحظات أكاديمية عن المتدرب',
+                  maxLines: 2),
             ],
           ),
         ),
@@ -512,7 +568,9 @@ class _EditTraineeDialogState extends ConsumerState<_EditTraineeDialog> {
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: const Text('إلغاء', style: TextStyle(color: AppColors.textSecondary, fontFamily: 'Cairo')),
+          child: const Text('إلغاء',
+              style: TextStyle(
+                  color: AppColors.textSecondary, fontFamily: 'Cairo')),
         ),
         ElevatedButton(
           onPressed: _isSaving
@@ -523,16 +581,36 @@ class _EditTraineeDialogState extends ConsumerState<_EditTraineeDialog> {
                     final repo = ref.read(traineesRepositoryProvider);
                     await repo.updateTraineeDetails(
                       traineeId: trainee.id,
-                      traineeCode: _codeCtrl.text.trim().isNotEmpty ? _codeCtrl.text.trim() : null,
-                      fullNameAr: _nameArCtrl.text.trim().isNotEmpty ? _nameArCtrl.text.trim() : null,
-                      fullNameEn: _nameEnCtrl.text.trim().isNotEmpty ? _nameEnCtrl.text.trim() : null,
-                      whatsapp: _whatsappCtrl.text.trim().isNotEmpty ? _whatsappCtrl.text.trim() : null,
-                      university: _universityCtrl.text.trim().isNotEmpty ? _universityCtrl.text.trim() : null,
-                      academicYear: _academicYearCtrl.text.trim().isNotEmpty ? _academicYearCtrl.text.trim() : null,
-                      province: _provinceCtrl.text.trim().isNotEmpty ? _provinceCtrl.text.trim() : null,
-                      address: _addressCtrl.text.trim().isNotEmpty ? _addressCtrl.text.trim() : null,
-                      behavioralNotes: _behavioralCtrl.text.trim().isNotEmpty ? _behavioralCtrl.text.trim() : null,
-                      academicNotes: _academicCtrl.text.trim().isNotEmpty ? _academicCtrl.text.trim() : null,
+                      traineeCode: _codeCtrl.text.trim().isNotEmpty
+                          ? _codeCtrl.text.trim()
+                          : null,
+                      fullNameAr: _nameArCtrl.text.trim().isNotEmpty
+                          ? _nameArCtrl.text.trim()
+                          : null,
+                      fullNameEn: _nameEnCtrl.text.trim().isNotEmpty
+                          ? _nameEnCtrl.text.trim()
+                          : null,
+                      whatsapp: _whatsappCtrl.text.trim().isNotEmpty
+                          ? _whatsappCtrl.text.trim()
+                          : null,
+                      university: _universityCtrl.text.trim().isNotEmpty
+                          ? _universityCtrl.text.trim()
+                          : null,
+                      academicYear: _academicYearCtrl.text.trim().isNotEmpty
+                          ? _academicYearCtrl.text.trim()
+                          : null,
+                      province: _provinceCtrl.text.trim().isNotEmpty
+                          ? _provinceCtrl.text.trim()
+                          : null,
+                      address: _addressCtrl.text.trim().isNotEmpty
+                          ? _addressCtrl.text.trim()
+                          : null,
+                      behavioralNotes: _behavioralCtrl.text.trim().isNotEmpty
+                          ? _behavioralCtrl.text.trim()
+                          : null,
+                      academicNotes: _academicCtrl.text.trim().isNotEmpty
+                          ? _academicCtrl.text.trim()
+                          : null,
                       batchDate: _selectedBatchDate,
                     );
                     ref.invalidate(traineeByIdProvider(trainee.id));
@@ -546,10 +624,218 @@ class _EditTraineeDialogState extends ConsumerState<_EditTraineeDialog> {
               ? const SizedBox(
                   width: 18,
                   height: 18,
-                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black),
+                  child: CircularProgressIndicator(
+                      strokeWidth: 2, color: Colors.black),
                 )
               : const Text('حفظ', style: TextStyle(fontFamily: 'Cairo')),
         ),
+      ],
+    );
+  }
+}
+
+class _ReferralSection extends ConsumerWidget {
+  final String traineeId;
+
+  const _ReferralSection({required this.traineeId});
+
+  String _statusLabel(String status) {
+    switch (status) {
+      case 'applied':
+        return 'مستخدم';
+      case 'cancelled':
+        return 'ملغى';
+      default:
+        return 'متاح';
+    }
+  }
+
+  Color _statusColor(String status) {
+    switch (status) {
+      case 'applied':
+        return AppColors.textSecondary;
+      case 'cancelled':
+        return AppColors.error;
+      default:
+        return AppColors.success;
+    }
+  }
+
+  String _formatAmount(double amount) =>
+      AppFormatters.amount.format(amount.toInt());
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final summaryAsync = ref.watch(staffReferralSummaryProvider(traineeId));
+
+    return _SectionCard(
+      title: 'الإحالات',
+      icon: Icons.card_giftcard,
+      child: summaryAsync.when(
+        loading: () => const Padding(
+          padding: EdgeInsets.all(16),
+          child: Center(
+            child: CircularProgressIndicator(color: AppColors.gold),
+          ),
+        ),
+        error: (e, _) => Text(
+          AppErrorHandler.friendlyMessage(e),
+          style: const TextStyle(color: AppColors.error, fontFamily: 'Cairo'),
+        ),
+        data: (summary) => _ReferralBody(
+          summary: summary,
+          statusLabel: _statusLabel,
+          statusColor: _statusColor,
+          formatAmount: _formatAmount,
+        ),
+      ),
+    );
+  }
+}
+
+class _ReferralBody extends StatelessWidget {
+  final ReferralSummary summary;
+  final String Function(String) statusLabel;
+  final Color Function(String) statusColor;
+  final String Function(double) formatAmount;
+
+  const _ReferralBody({
+    required this.summary,
+    required this.statusLabel,
+    required this.statusColor,
+    required this.formatAmount,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            const Expanded(
+              child: Text(
+                'كود الإحالة (كود الطالب)',
+                style: TextStyle(
+                  color: AppColors.textSecondary,
+                  fontFamily: 'Cairo',
+                ),
+              ),
+            ),
+            SelectableText(
+              summary.referralCode.isEmpty ? 'غير محدد' : summary.referralCode,
+              style: const TextStyle(
+                color: AppColors.gold,
+                fontFamily: 'Cairo',
+                fontWeight: FontWeight.bold,
+                letterSpacing: 1,
+              ),
+            ),
+          ],
+        ),
+        SizedBox(height: Responsive.spacing(context, 12)),
+        if (summary.availableCredits.isEmpty)
+          const Text(
+            'لا يوجد رصيد إحالة متاح حالياً',
+            style: TextStyle(
+              color: AppColors.textSecondary,
+              fontFamily: 'Cairo',
+              fontSize: 13,
+            ),
+          )
+        else
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: summary.availableCredits
+                .map(
+                  (credit) => Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: AppColors.success.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                        color: AppColors.success.withValues(alpha: 0.4),
+                      ),
+                    ),
+                    child: Text(
+                      'رصيد ${formatAmount(credit.amount)} ${credit.currency}'
+                      ' • ${credit.count} إحالة',
+                      style: const TextStyle(
+                        color: AppColors.success,
+                        fontFamily: 'Cairo',
+                        fontSize: 12,
+                      ),
+                    ),
+                  ),
+                )
+                .toList(),
+          ),
+        if (summary.referrals.isNotEmpty) ...[
+          SizedBox(height: Responsive.spacing(context, 12)),
+          const Divider(color: AppColors.divider),
+          ...summary.referrals.map(
+            (entry) => Padding(
+              padding: const EdgeInsets.symmetric(vertical: 6),
+              child: Row(
+                children: [
+                  Expanded(
+                    flex: 3,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          entry.refereeName,
+                          style: const TextStyle(
+                            color: AppColors.textPrimary,
+                            fontFamily: 'Cairo',
+                            fontSize: 13,
+                          ),
+                        ),
+                        Text(
+                          entry.courseName,
+                          style: const TextStyle(
+                            color: AppColors.textSecondary,
+                            fontFamily: 'Cairo',
+                            fontSize: 11,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Expanded(
+                    flex: 2,
+                    child: Text(
+                      '${formatAmount(entry.amount)} ${entry.currency}',
+                      style: const TextStyle(
+                        color: AppColors.textPrimary,
+                        fontFamily: 'Cairo',
+                        fontSize: 12,
+                      ),
+                    ),
+                  ),
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: statusColor(entry.status).withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      statusLabel(entry.status),
+                      style: TextStyle(
+                        color: statusColor(entry.status),
+                        fontFamily: 'Cairo',
+                        fontSize: 11,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
       ],
     );
   }

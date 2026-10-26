@@ -3,6 +3,40 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 void main() {
+  group('AppErrorHandler A5 referral codes', () {
+    String map(String code) => AppErrorHandler.friendlyMessage(
+          PostgrestException(message: code, code: 'P0001'),
+        );
+
+    test('maps code validation errors', () {
+      expect(map('REFERRAL_CODE_INVALID'), contains('كود الإحالة'));
+      expect(map('REFERRAL_REFERRER_INACTIVE'), contains('غير مفعّل'));
+      expect(map('REFERRAL_SELF'), contains('المتدرب نفسه'));
+      expect(map('REFERRAL_DISCOUNT_INVALID'), contains('غير صالحة'));
+    });
+
+    test('maps eligibility and amount errors', () {
+      expect(map('REFERRAL_REFEREE_ENROLLED'), contains('نفس نوع'));
+      expect(map('REFERRAL_ALREADY_REFERRED'), contains('مسبقاً'));
+      expect(map('REFERRAL_MUTUAL'), contains('تبادل'));
+      expect(map('REFERRAL_DISCOUNT_TOO_HIGH'), contains('المبلغ المتبقي'));
+      expect(map('REFERRAL_NOTHING_DUE'), contains('مستحق'));
+    });
+
+    test('maps a duplicate trainee code', () {
+      expect(
+        AppErrorHandler.friendlyMessage(
+          PostgrestException(
+            message: 'duplicate key value violates unique constraint '
+                '"uq_trainees_trainee_code"',
+            code: '23505',
+          ),
+        ),
+        contains('مستخدم لمتدرب آخر'),
+      );
+    });
+  });
+
   group('AppErrorHandler B4 domain codes', () {
     test('maps COHORT_CAPACITY_REACHED from message', () {
       final result = AppErrorHandler.friendlyMessage(

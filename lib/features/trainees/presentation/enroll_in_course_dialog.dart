@@ -5,6 +5,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/utils/responsive.dart';
 import '../../courses/data/courses_repository.dart';
+import 'widgets/referral_input_fields.dart';
 
 class EnrollInCourseDialog extends ConsumerStatefulWidget {
   final String traineeId;
@@ -27,6 +28,8 @@ class _EnrollInCourseDialogState extends ConsumerState<EnrollInCourseDialog> {
   String? _selectedCohortId;
   final _priceCtrl = TextEditingController();
   final _discountCtrl = TextEditingController(text: '0');
+  final _referralKey = GlobalKey<ReferralInputFieldsState>();
+  ReferralSelection _referral = const ReferralSelection();
   String _currency = 'SYP';
   bool _loading = false;
 
@@ -135,7 +138,54 @@ class _EnrollInCourseDialogState extends ConsumerState<EnrollInCourseDialog> {
     final cohortId = _selectedCohortId!;
     final totalDue = double.tryParse(_priceCtrl.text) ?? 0;
     final discountAmount = double.tryParse(_discountCtrl.text) ?? 0;
+    final referralCode = _referral.code;
+    final referralAmount = _referral.amount;
     String? existingWaitlistId;
+
+    if (referralCode != null) {
+      if (!_referral.isVerified) {
+        final preview = await _referralKey.currentState?.verify();
+        if (!mounted) return;
+        if (preview == null || !preview.valid || !_referral.isVerified) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'تحقق من كود الإحالة أولاً',
+                style: TextStyle(fontFamily: 'Cairo'),
+              ),
+              backgroundColor: AppColors.error,
+            ),
+          );
+          return;
+        }
+      }
+
+      if (referralAmount <= 0) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'أدخل قيمة خصم الإحالة (أكبر من صفر)',
+              style: TextStyle(fontFamily: 'Cairo'),
+            ),
+            backgroundColor: AppColors.error,
+          ),
+        );
+        return;
+      }
+
+      if (referralAmount > totalDue - discountAmount) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'خصم الإحالة أكبر من المبلغ المتبقي بعد الخصم اليدوي',
+              style: TextStyle(fontFamily: 'Cairo'),
+            ),
+            backgroundColor: AppColors.error,
+          ),
+        );
+        return;
+      }
+    }
 
     setState(() => _loading = true);
     try {
@@ -156,6 +206,8 @@ class _EnrollInCourseDialogState extends ConsumerState<EnrollInCourseDialog> {
           totalDue: totalDue,
           discountAmount: discountAmount,
           currency: _currency,
+          referralCode: referralCode,
+          referralDiscountAmount: referralAmount,
         );
       } else {
         await repo.enrollTrainee(
@@ -164,6 +216,8 @@ class _EnrollInCourseDialogState extends ConsumerState<EnrollInCourseDialog> {
           totalDue: totalDue,
           discountAmount: discountAmount,
           currency: _currency,
+          referralCode: referralCode,
+          referralDiscountAmount: referralAmount,
         );
       }
 
@@ -197,7 +251,9 @@ class _EnrollInCourseDialogState extends ConsumerState<EnrollInCourseDialog> {
         return;
       }
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(AppErrorHandler.friendlyMessage(e)), backgroundColor: AppColors.error),
+        SnackBar(
+            content: Text(AppErrorHandler.friendlyMessage(e)),
+            backgroundColor: AppColors.error),
       );
     } finally {
       if (mounted) setState(() => _loading = false);
@@ -213,124 +269,66 @@ class _EnrollInCourseDialogState extends ConsumerState<EnrollInCourseDialog> {
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 480),
-        child: Padding(
-          padding: EdgeInsets.all(Responsive.spacing(context, 24)),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  const Icon(Icons.school, color: AppColors.gold),
-                  SizedBox(width: Responsive.spacing(context, 8)),
-                  Expanded(
-                    child: Text(
-                      'تسجيل بكورس — ${widget.traineeName}',
-                      style: TextStyle(
-                        fontSize: Responsive.fontSize(context, 16),
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.gold,
-                        fontFamily: 'Cairo',
+        child: SingleChildScrollView(
+          child: Padding(
+            padding: EdgeInsets.all(Responsive.spacing(context, 24)),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    const Icon(Icons.school, color: AppColors.gold),
+                    SizedBox(width: Responsive.spacing(context, 8)),
+                    Expanded(
+                      child: Text(
+                        'تسجيل بكورس — ${widget.traineeName}',
+                        style: TextStyle(
+                          fontSize: Responsive.fontSize(context, 16),
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.gold,
+                          fontFamily: 'Cairo',
+                        ),
                       ),
                     ),
-                  ),
-                  IconButton(
-                    icon:
-                        const Icon(Icons.close, color: AppColors.textSecondary),
-                    onPressed: () => Navigator.pop(context),
-                  ),
-                ],
-              ),
-              const Divider(color: AppColors.divider),
-              SizedBox(height: Responsive.spacing(context, 16)),
-
-              // Cohort Dropdown
-              cohortsAsync.when(
-                loading: () =>
-                    const CircularProgressIndicator(color: AppColors.gold),
-                error: (e, _) => Text(AppErrorHandler.friendlyMessage(e),
-                    style: const TextStyle(
-                        color: AppColors.error, fontFamily: 'Cairo')),
-                data: (cohorts) {
-                  if (cohorts.isEmpty) {
-                    return Text(
-                      'لا توجد مجموعات متاحة — أنشئ مجموعة من شاشة الكورسات أولاً',
-                      style: TextStyle(
-                        color: AppColors.textSecondary,
-                        fontFamily: 'Cairo',
-                        fontSize: Responsive.fontSize(context, 13),
-                      ),
-                    );
-                  }
-
-                  return DropdownButtonFormField<String>(
-                    initialValue: _selectedCohortId,
-                    dropdownColor: AppColors.cardBg,
-                    decoration: InputDecoration(
-                      labelText: 'اختر الكورس / المجموعة *',
-                      labelStyle: const TextStyle(
-                          color: AppColors.textSecondary, fontFamily: 'Cairo'),
-                      prefixIcon: const Icon(Icons.menu_book_outlined,
-                          color: AppColors.gold),
-                      filled: true,
-                      fillColor: AppColors.surface,
-                      border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide:
-                              const BorderSide(color: AppColors.divider)),
-                      enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide:
-                              const BorderSide(color: AppColors.divider)),
-                      focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: const BorderSide(
-                              color: AppColors.gold, width: 2)),
+                    IconButton(
+                      icon: const Icon(Icons.close,
+                          color: AppColors.textSecondary),
+                      onPressed: () => Navigator.pop(context),
                     ),
-                    items: cohorts.map((c) {
-                      return DropdownMenuItem(
-                        value: c['id'] as String,
-                        child: Text(
-                          '${c['course_name']} — ${c['name']}',
-                          style: const TextStyle(
-                              color: AppColors.textPrimary,
-                              fontFamily: 'Cairo',
-                              fontSize: 13),
+                  ],
+                ),
+                const Divider(color: AppColors.divider),
+                SizedBox(height: Responsive.spacing(context, 16)),
+
+                // Cohort Dropdown
+                cohortsAsync.when(
+                  loading: () =>
+                      const CircularProgressIndicator(color: AppColors.gold),
+                  error: (e, _) => Text(AppErrorHandler.friendlyMessage(e),
+                      style: const TextStyle(
+                          color: AppColors.error, fontFamily: 'Cairo')),
+                  data: (cohorts) {
+                    if (cohorts.isEmpty) {
+                      return Text(
+                        'لا توجد مجموعات متاحة — أنشئ مجموعة من شاشة الكورسات أولاً',
+                        style: TextStyle(
+                          color: AppColors.textSecondary,
+                          fontFamily: 'Cairo',
+                          fontSize: Responsive.fontSize(context, 13),
                         ),
                       );
-                    }).toList(),
-                    onChanged: (v) {
-                      setState(() {
-                        _selectedCohortId = v;
-                        final selected = cohorts.firstWhere((c) => c['id'] == v,
-                            orElse: () => {});
-                        if (selected.isNotEmpty) {
-                          _priceCtrl.text =
-                              (selected['price'] as double).toInt().toString();
-                        }
-                      });
-                    },
-                  );
-                },
-              ),
+                    }
 
-              SizedBox(height: Responsive.spacing(context, 12)),
-
-              // Price + Currency
-              Row(
-                children: [
-                  Expanded(
-                    flex: 2,
-                    child: TextField(
-                      controller: _priceCtrl,
-                      keyboardType: TextInputType.number,
-                      style: const TextStyle(color: AppColors.textPrimary),
+                    return DropdownButtonFormField<String>(
+                      initialValue: _selectedCohortId,
+                      dropdownColor: AppColors.cardBg,
                       decoration: InputDecoration(
-                        labelText: 'السعر *',
+                        labelText: 'اختر الكورس / المجموعة *',
                         labelStyle: const TextStyle(
                             color: AppColors.textSecondary,
                             fontFamily: 'Cairo'),
-                        prefixIcon: const Icon(Icons.attach_money,
+                        prefixIcon: const Icon(Icons.menu_book_outlined,
                             color: AppColors.gold),
                         filled: true,
                         fillColor: AppColors.surface,
@@ -347,118 +345,192 @@ class _EnrollInCourseDialogState extends ConsumerState<EnrollInCourseDialog> {
                             borderSide: const BorderSide(
                                 color: AppColors.gold, width: 2)),
                       ),
-                    ),
-                  ),
-                  SizedBox(width: Responsive.spacing(context, 12)),
-                  Expanded(
-                    child: DropdownButtonFormField<String>(
-                      initialValue: _currency,
-                      dropdownColor: AppColors.cardBg,
-                      decoration: InputDecoration(
-                        labelText: 'العملة',
-                        labelStyle: const TextStyle(
-                            color: AppColors.textSecondary,
-                            fontFamily: 'Cairo'),
-                        filled: true,
-                        fillColor: AppColors.surface,
-                        border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide:
-                                const BorderSide(color: AppColors.divider)),
-                        enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide:
-                                const BorderSide(color: AppColors.divider)),
-                        focusedBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide: const BorderSide(
-                                color: AppColors.gold, width: 2)),
-                      ),
-                      items: const [
-                        DropdownMenuItem(
-                          value: 'SYP',
-                          child: Text('ل.س',
-                              style: TextStyle(
-                                  color: AppColors.textPrimary,
-                                  fontFamily: 'Cairo')),
-                        ),
-                        DropdownMenuItem(
-                          value: 'USD',
-                          child: Text('\$',
-                              style: TextStyle(
-                                  color: AppColors.textPrimary,
-                                  fontFamily: 'Cairo')),
-                        ),
-                      ],
-                      onChanged: (v) => setState(() => _currency = v ?? 'SYP'),
-                    ),
-                  ),
-                ],
-              ),
-
-              SizedBox(height: Responsive.spacing(context, 12)),
-
-              // Discount
-              TextField(
-                controller: _discountCtrl,
-                keyboardType: TextInputType.number,
-                style: const TextStyle(color: AppColors.textPrimary),
-                decoration: InputDecoration(
-                  labelText: 'الخصم (اختياري)',
-                  labelStyle: const TextStyle(
-                      color: AppColors.textSecondary, fontFamily: 'Cairo'),
-                  prefixIcon: const Icon(Icons.discount_outlined,
-                      color: AppColors.gold),
-                  filled: true,
-                  fillColor: AppColors.surface,
-                  border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: const BorderSide(color: AppColors.divider)),
-                  enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: const BorderSide(color: AppColors.divider)),
-                  focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide:
-                          const BorderSide(color: AppColors.gold, width: 2)),
+                      items: cohorts.map((c) {
+                        return DropdownMenuItem(
+                          value: c['id'] as String,
+                          child: Text(
+                            '${c['course_name']} — ${c['name']}',
+                            style: const TextStyle(
+                                color: AppColors.textPrimary,
+                                fontFamily: 'Cairo',
+                                fontSize: 13),
+                          ),
+                        );
+                      }).toList(),
+                      onChanged: (v) {
+                        setState(() {
+                          _selectedCohortId = v;
+                          final selected = cohorts.firstWhere(
+                              (c) => c['id'] == v,
+                              orElse: () => {});
+                          if (selected.isNotEmpty) {
+                            _priceCtrl.text = (selected['price'] as double)
+                                .toInt()
+                                .toString();
+                          }
+                        });
+                      },
+                    );
+                  },
                 ),
-              ),
 
-              SizedBox(height: Responsive.spacing(context, 24)),
+                SizedBox(height: Responsive.spacing(context, 12)),
 
-              Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton(
-                      onPressed: () => Navigator.pop(context),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: AppColors.textSecondary,
-                        side: const BorderSide(color: AppColors.divider),
-                        shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12)),
-                        padding: const EdgeInsets.symmetric(vertical: 14),
+                // Price + Currency
+                Row(
+                  children: [
+                    Expanded(
+                      flex: 2,
+                      child: TextField(
+                        controller: _priceCtrl,
+                        keyboardType: TextInputType.number,
+                        style: const TextStyle(color: AppColors.textPrimary),
+                        decoration: InputDecoration(
+                          labelText: 'السعر *',
+                          labelStyle: const TextStyle(
+                              color: AppColors.textSecondary,
+                              fontFamily: 'Cairo'),
+                          prefixIcon: const Icon(Icons.attach_money,
+                              color: AppColors.gold),
+                          filled: true,
+                          fillColor: AppColors.surface,
+                          border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              borderSide:
+                                  const BorderSide(color: AppColors.divider)),
+                          enabledBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              borderSide:
+                                  const BorderSide(color: AppColors.divider)),
+                          focusedBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              borderSide: const BorderSide(
+                                  color: AppColors.gold, width: 2)),
+                        ),
                       ),
-                      child: const Text('إلغاء',
-                          style: TextStyle(fontFamily: 'Cairo')),
                     ),
-                  ),
-                  SizedBox(width: Responsive.spacing(context, 12)),
-                  Expanded(
-                    child: ElevatedButton(
-                      onPressed: _loading ? null : _submit,
-                      child: _loading
-                          ? const SizedBox(
-                              height: 20,
-                              width: 20,
-                              child: CircularProgressIndicator(
-                                  color: Colors.black, strokeWidth: 2))
-                          : const Text('تسجيل',
-                              style: TextStyle(fontFamily: 'Cairo')),
+                    SizedBox(width: Responsive.spacing(context, 12)),
+                    Expanded(
+                      child: DropdownButtonFormField<String>(
+                        initialValue: _currency,
+                        dropdownColor: AppColors.cardBg,
+                        decoration: InputDecoration(
+                          labelText: 'العملة',
+                          labelStyle: const TextStyle(
+                              color: AppColors.textSecondary,
+                              fontFamily: 'Cairo'),
+                          filled: true,
+                          fillColor: AppColors.surface,
+                          border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              borderSide:
+                                  const BorderSide(color: AppColors.divider)),
+                          enabledBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              borderSide:
+                                  const BorderSide(color: AppColors.divider)),
+                          focusedBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              borderSide: const BorderSide(
+                                  color: AppColors.gold, width: 2)),
+                        ),
+                        items: const [
+                          DropdownMenuItem(
+                            value: 'SYP',
+                            child: Text('ل.س',
+                                style: TextStyle(
+                                    color: AppColors.textPrimary,
+                                    fontFamily: 'Cairo')),
+                          ),
+                          DropdownMenuItem(
+                            value: 'USD',
+                            child: Text('\$',
+                                style: TextStyle(
+                                    color: AppColors.textPrimary,
+                                    fontFamily: 'Cairo')),
+                          ),
+                        ],
+                        onChanged: (v) =>
+                            setState(() => _currency = v ?? 'SYP'),
+                      ),
                     ),
+                  ],
+                ),
+
+                SizedBox(height: Responsive.spacing(context, 12)),
+
+                // Discount
+                TextField(
+                  controller: _discountCtrl,
+                  keyboardType: TextInputType.number,
+                  style: const TextStyle(color: AppColors.textPrimary),
+                  decoration: InputDecoration(
+                    labelText: 'الخصم (اختياري)',
+                    labelStyle: const TextStyle(
+                        color: AppColors.textSecondary, fontFamily: 'Cairo'),
+                    prefixIcon: const Icon(Icons.discount_outlined,
+                        color: AppColors.gold),
+                    filled: true,
+                    fillColor: AppColors.surface,
+                    border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: const BorderSide(color: AppColors.divider)),
+                    enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: const BorderSide(color: AppColors.divider)),
+                    focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide:
+                            const BorderSide(color: AppColors.gold, width: 2)),
                   ),
-                ],
-              ),
-            ],
+                ),
+
+                SizedBox(height: Responsive.spacing(context, 12)),
+
+                ReferralInputFields(
+                  key: _referralKey,
+                  currency: _currency,
+                  onChanged: (selection) {
+                    if (mounted) setState(() => _referral = selection);
+                  },
+                ),
+
+                SizedBox(height: Responsive.spacing(context, 24)),
+
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: () => Navigator.pop(context),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: AppColors.textSecondary,
+                          side: const BorderSide(color: AppColors.divider),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12)),
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                        ),
+                        child: const Text('إلغاء',
+                            style: TextStyle(fontFamily: 'Cairo')),
+                      ),
+                    ),
+                    SizedBox(width: Responsive.spacing(context, 12)),
+                    Expanded(
+                      child: ElevatedButton(
+                        onPressed: _loading ? null : _submit,
+                        child: _loading
+                            ? const SizedBox(
+                                height: 20,
+                                width: 20,
+                                child: CircularProgressIndicator(
+                                    color: Colors.black, strokeWidth: 2))
+                            : const Text('تسجيل',
+                                style: TextStyle(fontFamily: 'Cairo')),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
         ),
       ),

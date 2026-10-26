@@ -67,18 +67,34 @@ class _AddTraineeDialogState extends ConsumerState<AddTraineeDialog> {
     try {
       final repo = ref.read(traineesRepositoryProvider);
       await repo.addTrainee(
-        traineeCode: _codeCtrl.text.trim().isNotEmpty ? _codeCtrl.text.trim() : null,
+        traineeCode:
+            _codeCtrl.text.trim().isNotEmpty ? _codeCtrl.text.trim() : null,
         fullName: _nameArCtrl.text.trim(),
-        fullNameEn: _nameEnCtrl.text.trim().isNotEmpty ? _nameEnCtrl.text.trim() : null,
+        fullNameEn:
+            _nameEnCtrl.text.trim().isNotEmpty ? _nameEnCtrl.text.trim() : null,
         email: _emailCtrl.text.trim(),
         phone: _phoneCtrl.text.trim(),
-        whatsapp: _whatsappCtrl.text.trim().isNotEmpty ? _whatsappCtrl.text.trim() : null,
-        university: _universityCtrl.text.trim().isNotEmpty ? _universityCtrl.text.trim() : null,
-        academicYear: _academicYearCtrl.text.trim().isNotEmpty ? _academicYearCtrl.text.trim() : null,
-        province: _provinceCtrl.text.trim().isNotEmpty ? _provinceCtrl.text.trim() : null,
-        address: _addressCtrl.text.trim().isNotEmpty ? _addressCtrl.text.trim() : null,
-        behavioralNotes: _behavioralNotesCtrl.text.trim().isNotEmpty ? _behavioralNotesCtrl.text.trim() : null,
-        academicNotes: _academicNotesCtrl.text.trim().isNotEmpty ? _academicNotesCtrl.text.trim() : null,
+        whatsapp: _whatsappCtrl.text.trim().isNotEmpty
+            ? _whatsappCtrl.text.trim()
+            : null,
+        university: _universityCtrl.text.trim().isNotEmpty
+            ? _universityCtrl.text.trim()
+            : null,
+        academicYear: _academicYearCtrl.text.trim().isNotEmpty
+            ? _academicYearCtrl.text.trim()
+            : null,
+        province: _provinceCtrl.text.trim().isNotEmpty
+            ? _provinceCtrl.text.trim()
+            : null,
+        address: _addressCtrl.text.trim().isNotEmpty
+            ? _addressCtrl.text.trim()
+            : null,
+        behavioralNotes: _behavioralNotesCtrl.text.trim().isNotEmpty
+            ? _behavioralNotesCtrl.text.trim()
+            : null,
+        academicNotes: _academicNotesCtrl.text.trim().isNotEmpty
+            ? _academicNotesCtrl.text.trim()
+            : null,
         batchDate: _batchDate,
         password: _passwordCtrl.text,
       );
@@ -113,7 +129,8 @@ class _AddTraineeDialogState extends ConsumerState<AddTraineeDialog> {
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: Container(
         width: 620,
-        constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.9),
+        constraints:
+            BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.9),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -125,7 +142,8 @@ class _AddTraineeDialogState extends ConsumerState<AddTraineeDialog> {
                 children: [
                   const Row(
                     children: [
-                      Icon(Icons.person_add_alt_1, color: AppColors.gold, size: 22),
+                      Icon(Icons.person_add_alt_1,
+                          color: AppColors.gold, size: 22),
                       SizedBox(width: 8),
                       Text(
                         'إضافة متدرب جديد',
@@ -139,7 +157,8 @@ class _AddTraineeDialogState extends ConsumerState<AddTraineeDialog> {
                     ],
                   ),
                   IconButton(
-                    icon: const Icon(Icons.close, color: AppColors.textSecondary),
+                    icon:
+                        const Icon(Icons.close, color: AppColors.textSecondary),
                     onPressed: () => Navigator.pop(context),
                   ),
                 ],
@@ -150,14 +169,15 @@ class _AddTraineeDialogState extends ConsumerState<AddTraineeDialog> {
             // 2. Scrollable Middle Fields
             Flexible(
               child: SingleChildScrollView(
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     // Trainee Code (Phase 2)
                     _buildField(
                       controller: _codeCtrl,
-                      label: 'كود المتدرب (مثال: T10001 — اتركه فارغاً للتوليد التلقائي)',
+                      label: 'كود المتدرب الرسمي (مثال: T10154)',
                       icon: Icons.qr_code,
                       isLtr: true,
                     ),
@@ -256,7 +276,7 @@ class _AddTraineeDialogState extends ConsumerState<AddTraineeDialog> {
                     ),
                     const SizedBox(height: 12),
 
-                                        // Batch Date & Notes
+                    // Batch Date & Notes
                     Row(
                       children: [
                         Expanded(
@@ -266,7 +286,8 @@ class _AddTraineeDialogState extends ConsumerState<AddTraineeDialog> {
                                 context: context,
                                 initialDate: _batchDate ?? DateTime.now(),
                                 firstDate: DateTime(2020),
-                                lastDate: DateTime.now().add(const Duration(days: 365)),
+                                lastDate: DateTime.now()
+                                    .add(const Duration(days: 365)),
                                 builder: (context, child) => Theme(
                                   data: Theme.of(context).copyWith(
                                     colorScheme: const ColorScheme.dark(
@@ -285,7 +306,8 @@ class _AddTraineeDialogState extends ConsumerState<AddTraineeDialog> {
                             },
                             borderRadius: BorderRadius.circular(10),
                             child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 15),
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 16, vertical: 15),
                               decoration: BoxDecoration(
                                 color: AppColors.surface,
                                 borderRadius: BorderRadius.circular(10),
@@ -293,7 +315,8 @@ class _AddTraineeDialogState extends ConsumerState<AddTraineeDialog> {
                               ),
                               child: Row(
                                 children: [
-                                  const Icon(Icons.event_outlined, color: AppColors.gold, size: 20),
+                                  const Icon(Icons.event_outlined,
+                                      color: AppColors.gold, size: 20),
                                   const SizedBox(width: 10),
                                   Expanded(
                                     child: Text(
@@ -301,7 +324,9 @@ class _AddTraineeDialogState extends ConsumerState<AddTraineeDialog> {
                                           ? 'تاريخ الدفعة: ${AppFormatters.dateOnly.format(_batchDate!)}'
                                           : 'تحديد تاريخ الدفعة (اختياري)',
                                       style: TextStyle(
-                                        color: _batchDate != null ? AppColors.textPrimary : AppColors.textSecondary,
+                                        color: _batchDate != null
+                                            ? AppColors.textPrimary
+                                            : AppColors.textSecondary,
                                         fontFamily: 'Cairo',
                                         fontSize: 13,
                                       ),
@@ -309,8 +334,11 @@ class _AddTraineeDialogState extends ConsumerState<AddTraineeDialog> {
                                   ),
                                   if (_batchDate != null)
                                     IconButton(
-                                      icon: const Icon(Icons.clear, size: 16, color: AppColors.textSecondary),
-                                      onPressed: () => setState(() => _batchDate = null),
+                                      icon: const Icon(Icons.clear,
+                                          size: 16,
+                                          color: AppColors.textSecondary),
+                                      onPressed: () =>
+                                          setState(() => _batchDate = null),
                                     ),
                                 ],
                               ),
@@ -362,9 +390,10 @@ class _AddTraineeDialogState extends ConsumerState<AddTraineeDialog> {
                       decoration: InputDecoration(
                         labelText: 'كلمة المرور (لتطبيق المتدرب) *',
                         labelStyle: const TextStyle(
-                            color: AppColors.textSecondary, fontFamily: 'Cairo'),
-                        prefixIcon:
-                            const Icon(Icons.lock_outlined, color: AppColors.gold),
+                            color: AppColors.textSecondary,
+                            fontFamily: 'Cairo'),
+                        prefixIcon: const Icon(Icons.lock_outlined,
+                            color: AppColors.gold),
                         suffixIcon: IconButton(
                           icon: Icon(
                             _obscure ? Icons.visibility_off : Icons.visibility,
@@ -376,11 +405,13 @@ class _AddTraineeDialogState extends ConsumerState<AddTraineeDialog> {
                         fillColor: AppColors.surface,
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
-                          borderSide: const BorderSide(color: AppColors.divider),
+                          borderSide:
+                              const BorderSide(color: AppColors.divider),
                         ),
                         enabledBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
-                          borderSide: const BorderSide(color: AppColors.divider),
+                          borderSide:
+                              const BorderSide(color: AppColors.divider),
                         ),
                         focusedBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
@@ -432,7 +463,9 @@ class _AddTraineeDialogState extends ConsumerState<AddTraineeDialog> {
                             )
                           : const Text(
                               'إضافة متدرب',
-                              style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold),
+                              style: TextStyle(
+                                  fontFamily: 'Cairo',
+                                  fontWeight: FontWeight.bold),
                             ),
                     ),
                   ),
