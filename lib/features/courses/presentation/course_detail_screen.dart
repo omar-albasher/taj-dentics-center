@@ -1,9 +1,13 @@
 import 'widgets/course_materials_dialog.dart';
+import 'widgets/cohort_capacity_dialog.dart';
+import 'widgets/course_waitlist_dialog.dart';
+import 'widgets/seat_status_badge.dart';
 import '../../sessions/data/admin_sessions_repository.dart';
 import '../../../core/utils/app_error_handler.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/router/app_router.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/utils/app_formatters.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -12,6 +16,8 @@ import '../../../core/utils/responsive.dart';
 import '../data/courses_repository.dart';
 import '../domain/course_model.dart';
 import '../domain/cohort_model.dart';
+import '../domain/cohort_seat_status.dart';
+import '../domain/waitlist_entry_model.dart';
 import '../../trainees/data/trainees_repository.dart';
 
 class CourseDetailScreen extends ConsumerWidget {
@@ -92,6 +98,12 @@ class CourseDetailScreen extends ConsumerWidget {
 
   Widget _buildContent(BuildContext context, WidgetRef ref, CourseModel course) {
     final cohortsAsync = ref.watch(cohortsByCourseProvider(course.id));
+    final seatStatusAsync = ref.watch(cohortSeatStatusProvider(course.id));
+    final seatStatuses = {
+      for (final status
+          in seatStatusAsync.asData?.value ?? const <CohortSeatStatus>[])
+        status.cohortId: status,
+    };
     final fmt = AppFormatters.amount;
 
     return Scaffold(
@@ -248,7 +260,13 @@ class CourseDetailScreen extends ConsumerWidget {
                       return _CohortCard(
                         cohort: cohort,
                         course: course,
-                        onEnroll: () => _showEnrollDialog(context, ref, cohort, course),
+                        seatStatus: seatStatuses[cohort.id],
+                        onEnroll: () =>
+                            _showEnrollDialog(context, ref, cohort, course),
+                        onManageWaitlist: () =>
+                            _showWaitlistDialog(context, cohort, course),
+                        onEditCapacity: () =>
+                            _showCapacityDialog(context, cohort),
                       );
                     },
                   );
@@ -266,20 +284,46 @@ class CourseDetailScreen extends ConsumerWidget {
       context: context,
       builder: (_) => _AddCohortDialog(
         course: course,
-        onSaved: () => ref.invalidate(cohortsByCourseProvider(course.id)),
+        onSaved: () {
+          ref.invalidate(cohortsByCourseProvider(course.id));
+          ref.invalidate(cohortSeatStatusProvider(course.id));
+        },
       ),
     );
   }
 
-  void _showEnrollDialog(
-      BuildContext context, WidgetRef ref, CohortModel cohort, CourseModel course) {
-    showDialog(
+  Future<void> _showEnrollDialog(
+      BuildContext context, WidgetRef ref, CohortModel cohort, CourseModel course) async {
+    final openWaitlist = await showDialog<bool>(
       context: context,
       builder: (_) => _EnrollTraineeDialog(
         cohort: cohort,
         course: course,
-        onEnrolled: () => ref.invalidate(cohortsByCourseProvider(course.id)),
+        onEnrolled: () {
+          ref.invalidate(cohortsByCourseProvider(course.id));
+          ref.invalidate(cohortSeatStatusProvider(course.id));
+          ref.invalidate(waitlistProvider(cohort.id));
+        },
       ),
+    );
+
+    if (openWaitlist == true && context.mounted) {
+      _showWaitlistDialog(context, cohort, course);
+    }
+  }
+
+  void _showWaitlistDialog(
+      BuildContext context, CohortModel cohort, CourseModel course) {
+    showDialog(
+      context: context,
+      builder: (_) => CourseWaitlistDialog(cohort: cohort, course: course),
+    );
+  }
+
+  void _showCapacityDialog(BuildContext context, CohortModel cohort) {
+    showDialog(
+      context: context,
+      builder: (_) => CohortCapacityDialog(cohort: cohort),
     );
   }
 }
@@ -288,97 +332,180 @@ class CourseDetailScreen extends ConsumerWidget {
 class _CohortCard extends StatelessWidget {
   final CohortModel cohort;
   final CourseModel course;
+  final CohortSeatStatus? seatStatus;
   final VoidCallback onEnroll;
+  final VoidCallback onManageWaitlist;
+  final VoidCallback onEditCapacity;
 
   const _CohortCard({
     required this.cohort,
     required this.course,
+    required this.seatStatus,
     required this.onEnroll,
+    required this.onManageWaitlist,
+    required this.onEditCapacity,
   });
+
+  String _seatLabel(CohortSeatStatus status) {
+    if (status.isUnlimited) return 'سعة غير محدودة';
+    if (status.isFull) return 'ممتلئ';
+    return 'متبقي ${status.availableSeats ?? 0} من ${status.capacity}';
+  }
+
+  Color _seatColor(CohortSeatStatus status) {
+    if (status.isUnlimited) return AppColors.silver;
+    if (status.isFull) return AppColors.error;
+    return AppColors.success;
+  }
 
   @override
   Widget build(BuildContext context) {
+    final status = seatStatus;
     return Container(
       padding: EdgeInsets.all(Responsive.spacing(context, 16)),
       decoration: BoxDecoration(
         color: AppColors.cardBg,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.divider),
+        border: Border.all(
+          color: status?.isFull == true
+              ? AppColors.error.withValues(alpha: 0.4)
+              : AppColors.divider,
+        ),
       ),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(
-            width: 44,
-            height: 44,
-            decoration: BoxDecoration(
-              color: AppColors.darkGreen.withValues(alpha: 0.5),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: const Icon(Icons.group, color: AppColors.gold),
-          ),
-          SizedBox(width: Responsive.spacing(context, 12)),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  cohort.name,
-                  style: TextStyle(
-                    fontSize: Responsive.fontSize(context, 15),
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.textPrimary,
-                    fontFamily: 'Cairo',
-                  ),
+          Row(
+            children: [
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: AppColors.darkGreen.withValues(alpha: 0.5),
+                  borderRadius: BorderRadius.circular(12),
                 ),
-                if (cohort.startsAt != null)
-                  Text(
-                    'تبدأ: ${AppFormatters.dateOnly.format(cohort.startsAt!)}',
-                    style: TextStyle(
-                      fontSize: Responsive.fontSize(context, 12),
-                      color: AppColors.textSecondary,
-                      fontFamily: 'Cairo',
+                child: const Icon(Icons.group, color: AppColors.gold),
+              ),
+              SizedBox(width: Responsive.spacing(context, 12)),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      cohort.name,
+                      style: TextStyle(
+                        fontSize: Responsive.fontSize(context, 15),
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.textPrimary,
+                        fontFamily: 'Cairo',
+                      ),
                     ),
+                    if (cohort.startsAt != null)
+                      Text(
+                        'تبدأ: ${AppFormatters.dateOnly.format(cohort.startsAt!)}',
+                        style: TextStyle(
+                          fontSize: Responsive.fontSize(context, 12),
+                          color: AppColors.textSecondary,
+                          fontFamily: 'Cairo',
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+              if (status != null) ...[
+                SeatStatusBadge(
+                  label: _seatLabel(status),
+                  color: _seatColor(status),
+                  icon: status.isFull ? Icons.block : Icons.event_seat,
+                ),
+                if (status.waitlistCount > 0) ...[
+                  const SizedBox(width: 6),
+                  SeatStatusBadge(
+                    label: 'انتظار ${status.waitlistCount}',
+                    color: AppColors.warning,
+                    icon: Icons.hourglass_bottom,
                   ),
+                ],
               ],
-            ),
+            ],
           ),
-          // زر جدولة الجلسات بالجملة (المرحلة 8)
-          IconButton(
-            icon: const Icon(Icons.playlist_add, color: AppColors.gold, size: 22),
-            tooltip: 'جدولة جلسات الدفعة بالجملة',
-            onPressed: () {
-              showDialog(
-                context: context,
-                builder: (_) => _BulkScheduleSessionsDialog(
-                  cohort: cohort,
-                  course: course,
+          SizedBox(height: Responsive.spacing(context, 10)),
+          Wrap(
+            spacing: 8,
+            runSpacing: 4,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              ElevatedButton.icon(
+                onPressed: onEnroll,
+                icon: const Icon(Icons.person_add, size: 16),
+                label: const Text('تسجيل متدرب',
+                    style: TextStyle(fontFamily: 'Cairo', fontSize: 12)),
+                style: ElevatedButton.styleFrom(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                 ),
-              );
-            },
-          ),
-          // زر ترحيل المواعيد (المرحلة 7)
-          IconButton(
-            icon: const Icon(Icons.edit_calendar, color: AppColors.textSecondary, size: 20),
-            tooltip: 'ترحيل مواعيد الجلسات',
-            onPressed: () {
-              showDialog(
-                context: context,
-                builder: (_) => _ShiftCohortSessionsDialog(
-                  cohort: cohort,
-                  onShifted: () {},
+              ),
+              OutlinedButton.icon(
+                onPressed: onManageWaitlist,
+                icon: const Icon(Icons.hourglass_bottom,
+                    size: 16, color: AppColors.warning),
+                label: const Text('قائمة الانتظار',
+                    style: TextStyle(
+                        fontFamily: 'Cairo',
+                        fontSize: 12,
+                        color: AppColors.textSecondary)),
+                style: OutlinedButton.styleFrom(
+                  side: const BorderSide(color: AppColors.divider),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                 ),
-              );
-            },
-          ),
-          SizedBox(width: Responsive.spacing(context, 8)),
-          ElevatedButton.icon(
-            onPressed: onEnroll,
-            icon: const Icon(Icons.person_add, size: 16),
-            label: const Text('تسجيل متدرب',
-                style: TextStyle(fontFamily: 'Cairo', fontSize: 12)),
-            style: ElevatedButton.styleFrom(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            ),
+              ),
+              OutlinedButton.icon(
+                onPressed: onEditCapacity,
+                icon: const Icon(Icons.groups_2_outlined,
+                    size: 16, color: AppColors.gold),
+                label: const Text('السعة',
+                    style: TextStyle(
+                        fontFamily: 'Cairo',
+                        fontSize: 12,
+                        color: AppColors.textSecondary)),
+                style: OutlinedButton.styleFrom(
+                  side: const BorderSide(color: AppColors.divider),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                ),
+              ),
+              // زر جدولة الجلسات بالجملة (المرحلة 8)
+              IconButton(
+                icon: const Icon(Icons.playlist_add,
+                    color: AppColors.gold, size: 22),
+                tooltip: 'جدولة جلسات الدفعة بالجملة',
+                onPressed: () {
+                  showDialog(
+                    context: context,
+                    builder: (_) => _BulkScheduleSessionsDialog(
+                      cohort: cohort,
+                      course: course,
+                    ),
+                  );
+                },
+              ),
+              // زر ترحيل المواعيد (المرحلة 7)
+              IconButton(
+                icon: const Icon(Icons.edit_calendar,
+                    color: AppColors.textSecondary, size: 20),
+                tooltip: 'ترحيل مواعيد الجلسات',
+                onPressed: () {
+                  showDialog(
+                    context: context,
+                    builder: (_) => _ShiftCohortSessionsDialog(
+                      cohort: cohort,
+                      onShifted: () {},
+                    ),
+                  );
+                },
+              ),
+            ],
           ),
         ],
       ),
@@ -399,17 +526,38 @@ class _AddCohortDialog extends ConsumerStatefulWidget {
 
 class _AddCohortDialogState extends ConsumerState<_AddCohortDialog> {
   final _nameCtrl = TextEditingController();
+  final _capacityCtrl = TextEditingController();
   DateTime? _startsAt;
   bool _loading = false;
 
   @override
   void dispose() {
     _nameCtrl.dispose();
+    _capacityCtrl.dispose();
     super.dispose();
   }
 
   Future<void> _submit() async {
     if (_nameCtrl.text.isEmpty) return;
+
+    int? capacity;
+    final rawCapacity = _capacityCtrl.text.trim();
+    if (rawCapacity.isNotEmpty) {
+      capacity = int.tryParse(rawCapacity);
+      if (capacity == null || capacity <= 0) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'السعة يجب أن تكون رقماً أكبر من صفر',
+              style: TextStyle(fontFamily: 'Cairo'),
+            ),
+            backgroundColor: AppColors.error,
+          ),
+        );
+        return;
+      }
+    }
+
     setState(() => _loading = true);
     try {
       final currentUserId = Supabase.instance.client.auth.currentUser!.id;
@@ -418,12 +566,14 @@ class _AddCohortDialogState extends ConsumerState<_AddCohortDialog> {
             name: _nameCtrl.text.trim(),
             trainerId: currentUserId,
             startsAt: _startsAt,
+            capacity: capacity,
           );
 
       if (!mounted) return;
+      final messenger = ScaffoldMessenger.of(context);
       Navigator.pop(context);
       widget.onSaved();
-      ScaffoldMessenger.of(context).showSnackBar(
+      messenger.showSnackBar(
         const SnackBar(
           content: Text('تم إضافة المجموعة بنجاح ✓'),
           backgroundColor: AppColors.success,
@@ -541,6 +691,38 @@ class _AddCohortDialogState extends ConsumerState<_AddCohortDialog> {
                 ),
               ),
 
+              SizedBox(height: Responsive.spacing(context, 12)),
+
+              // Capacity (اختياري)
+              TextField(
+                controller: _capacityCtrl,
+                keyboardType: TextInputType.number,
+                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                style: const TextStyle(color: AppColors.textPrimary),
+                decoration: InputDecoration(
+                  labelText: 'السعة (اختياري)',
+                  hintText: 'فارغ = غير محدود',
+                  labelStyle: const TextStyle(
+                      color: AppColors.textSecondary, fontFamily: 'Cairo'),
+                  hintStyle: const TextStyle(
+                      color: AppColors.textSecondary, fontFamily: 'Cairo'),
+                  prefixIcon: const Icon(Icons.groups_2_outlined,
+                      color: AppColors.gold),
+                  filled: true,
+                  fillColor: AppColors.surface,
+                  border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: const BorderSide(color: AppColors.divider)),
+                  enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: const BorderSide(color: AppColors.divider)),
+                  focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide:
+                          const BorderSide(color: AppColors.gold, width: 2)),
+                ),
+              ),
+
               SizedBox(height: Responsive.spacing(context, 24)),
 
               Row(
@@ -620,6 +802,90 @@ class _EnrollTraineeDialogState extends ConsumerState<_EnrollTraineeDialog> {
     super.dispose();
   }
 
+  bool _isCapacityReached(Object error) {
+    return error is PostgrestException &&
+        (error.message.contains('COHORT_CAPACITY_REACHED') ||
+            (error.details?.toString().contains('COHORT_CAPACITY_REACHED') ??
+                false));
+  }
+
+  Future<bool> _confirmJoinWaitlist() async {
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: AppColors.cardBg,
+        title: const Text(
+          'المجموعة ممتلئة',
+          style: TextStyle(color: AppColors.gold, fontFamily: 'Cairo'),
+        ),
+        content: const Text(
+          'لا توجد مقاعد متاحة في هذه المجموعة. هل تريد إضافة المتدرب إلى قائمة الانتظار؟',
+          style: TextStyle(
+            color: AppColors.textPrimary,
+            fontFamily: 'Cairo',
+            height: 1.5,
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text(
+              'إلغاء',
+              style: TextStyle(
+                fontFamily: 'Cairo',
+                color: AppColors.textSecondary,
+              ),
+            ),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text(
+              'إضافة للانتظار',
+              style: TextStyle(fontFamily: 'Cairo'),
+            ),
+          ),
+        ],
+      ),
+    );
+    return result == true;
+  }
+
+  Future<void> _joinWaitlistAndClose() async {
+    final traineeId = _selectedTraineeId;
+    if (traineeId == null) return;
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final result = await ref.read(coursesRepositoryProvider).joinWaitlist(
+            cohortId: widget.cohort.id,
+            traineeId: traineeId,
+          );
+      if (!mounted) return;
+      final position = result['queue_position'];
+      final message = position != null
+          ? 'المجموعة ممتلئة — تمت إضافة المتدرب إلى الانتظار (الترتيب $position)'
+          : 'المجموعة ممتلئة — تمت إضافة المتدرب إلى الانتظار';
+      widget.onEnrolled();
+      Navigator.pop(context, true);
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(message, style: const TextStyle(fontFamily: 'Cairo')),
+          backgroundColor: AppColors.warning,
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            AppErrorHandler.friendlyMessage(e),
+            style: const TextStyle(fontFamily: 'Cairo'),
+          ),
+          backgroundColor: AppColors.error,
+        ),
+      );
+    }
+  }
+
   Future<void> _submit() async {
     if (_selectedTraineeId == null) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -633,7 +899,35 @@ class _EnrollTraineeDialogState extends ConsumerState<_EnrollTraineeDialog> {
 
     setState(() => _loading = true);
     try {
-      await ref.read(coursesRepositoryProvider).enrollTrainee(
+      final repo = ref.read(coursesRepositoryProvider);
+
+      // المتدرب الموجود في الانتظار يجب أن يُرقّى من شاشة الانتظار، وليس بتسجيل مباشر
+      final activeWaitlist = await repo.getActiveWaitlist(widget.cohort.id);
+      WaitlistEntryModel? existingEntry;
+      for (final entry in activeWaitlist) {
+        if (entry.traineeId == _selectedTraineeId) {
+          existingEntry = entry;
+          break;
+        }
+      }
+      if (existingEntry != null) {
+        if (!mounted) return;
+        final messenger = ScaffoldMessenger.of(context);
+        widget.onEnrolled();
+        Navigator.pop(context, true);
+        messenger.showSnackBar(
+          const SnackBar(
+            content: Text(
+              'هذا المتدرب في قائمة الانتظار — استخدم شاشة قائمة الانتظار للترقية',
+              style: TextStyle(fontFamily: 'Cairo'),
+            ),
+            backgroundColor: AppColors.warning,
+          ),
+        );
+        return;
+      }
+
+      await repo.enrollTrainee(
             traineeId: _selectedTraineeId!,
             cohortId: widget.cohort.id,
             totalDue: double.tryParse(_priceCtrl.text) ?? widget.course.price,
@@ -642,9 +936,10 @@ class _EnrollTraineeDialogState extends ConsumerState<_EnrollTraineeDialog> {
           );
 
       if (!mounted) return;
-      Navigator.pop(context);
+      final messenger = ScaffoldMessenger.of(context);
       widget.onEnrolled();
-      ScaffoldMessenger.of(context).showSnackBar(
+      Navigator.pop(context);
+      messenger.showSnackBar(
         const SnackBar(
           content: Text('تم تسجيل المتدرب بنجاح ✓'),
           backgroundColor: AppColors.success,
@@ -652,6 +947,14 @@ class _EnrollTraineeDialogState extends ConsumerState<_EnrollTraineeDialog> {
       );
     } catch (e) {
       if (!mounted) return;
+      if (_isCapacityReached(e)) {
+        setState(() => _loading = false);
+        final join = await _confirmJoinWaitlist();
+        if (!mounted || !join) return;
+        setState(() => _loading = true);
+        await _joinWaitlistAndClose();
+        return;
+      }
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(AppErrorHandler.friendlyMessage(e)), backgroundColor: AppColors.error),
       );

@@ -1,6 +1,7 @@
 import '../../../core/utils/app_error_handler.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/utils/responsive.dart';
 import '../../courses/data/courses_repository.dart';
@@ -36,6 +37,90 @@ class _EnrollInCourseDialogState extends ConsumerState<EnrollInCourseDialog> {
     super.dispose();
   }
 
+  bool _isCapacityReached(Object error) {
+    return error is PostgrestException &&
+        (error.message.contains('COHORT_CAPACITY_REACHED') ||
+            (error.details?.toString().contains('COHORT_CAPACITY_REACHED') ??
+                false));
+  }
+
+  Future<bool> _confirmJoinWaitlist() async {
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: AppColors.cardBg,
+        title: const Text(
+          'المجموعة ممتلئة',
+          style: TextStyle(color: AppColors.gold, fontFamily: 'Cairo'),
+        ),
+        content: const Text(
+          'لا توجد مقاعد متاحة في هذه المجموعة. هل تريد إضافة المتدرب إلى قائمة الانتظار؟',
+          style: TextStyle(
+            color: AppColors.textPrimary,
+            fontFamily: 'Cairo',
+            height: 1.5,
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text(
+              'إلغاء',
+              style: TextStyle(
+                fontFamily: 'Cairo',
+                color: AppColors.textSecondary,
+              ),
+            ),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text(
+              'إضافة للانتظار',
+              style: TextStyle(fontFamily: 'Cairo'),
+            ),
+          ),
+        ],
+      ),
+    );
+    return result == true;
+  }
+
+  Future<void> _joinWaitlistAndClose(String cohortId) async {
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final result = await ref.read(coursesRepositoryProvider).joinWaitlist(
+            cohortId: cohortId,
+            traineeId: widget.traineeId,
+          );
+      if (!mounted) return;
+      ref.invalidate(cohortSeatStatusProvider);
+      ref.invalidate(waitlistProvider(cohortId));
+      final position = result['queue_position'];
+      final message = position != null
+          ? 'المجموعة ممتلئة — تمت إضافة المتدرب إلى الانتظار (الترتيب $position)'
+          : 'المجموعة ممتلئة — تمت إضافة المتدرب إلى الانتظار';
+      Navigator.pop(context);
+      widget.onEnrolled();
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(message, style: const TextStyle(fontFamily: 'Cairo')),
+          backgroundColor: AppColors.warning,
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            AppErrorHandler.friendlyMessage(e),
+            style: const TextStyle(fontFamily: 'Cairo'),
+          ),
+          backgroundColor: AppColors.error,
+        ),
+      );
+    }
+  }
+
   Future<void> _submit() async {
     if (_selectedCohortId == null || _priceCtrl.text.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -47,28 +132,70 @@ class _EnrollInCourseDialogState extends ConsumerState<EnrollInCourseDialog> {
       return;
     }
 
+    final cohortId = _selectedCohortId!;
+    final totalDue = double.tryParse(_priceCtrl.text) ?? 0;
+    final discountAmount = double.tryParse(_discountCtrl.text) ?? 0;
+    String? existingWaitlistId;
+
     setState(() => _loading = true);
     try {
-      await ref.read(coursesRepositoryProvider).enrollTrainee(
-            traineeId: widget.traineeId,
-            cohortId: _selectedCohortId!,
-            totalDue: double.parse(_priceCtrl.text),
-            discountAmount: double.tryParse(_discountCtrl.text) ?? 0,
-            currency: _currency,
-          );
+      final repo = ref.read(coursesRepositoryProvider);
+
+      // المتدرب الموجود في الانتظار تُرقّى طلبه بدل إنشاء تسجيل مباشر
+      final activeWaitlist = await repo.getActiveWaitlist(cohortId);
+      for (final entry in activeWaitlist) {
+        if (entry.traineeId == widget.traineeId) {
+          existingWaitlistId = entry.id;
+          break;
+        }
+      }
+
+      if (existingWaitlistId != null) {
+        await repo.promoteWaitlist(
+          waitlistId: existingWaitlistId,
+          totalDue: totalDue,
+          discountAmount: discountAmount,
+          currency: _currency,
+        );
+      } else {
+        await repo.enrollTrainee(
+          traineeId: widget.traineeId,
+          cohortId: cohortId,
+          totalDue: totalDue,
+          discountAmount: discountAmount,
+          currency: _currency,
+        );
+      }
 
       if (!mounted) return;
+      final messenger = ScaffoldMessenger.of(context);
+      ref.invalidate(cohortSeatStatusProvider);
+      ref.invalidate(waitlistProvider(cohortId));
+      final promoted = existingWaitlistId != null;
       Navigator.pop(context);
       widget.onEnrolled();
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('تم تسجيل المتدرب بنجاح ✓'),
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            promoted
+                ? 'تمت ترقية المتدرب وتسجيله بنجاح ✓'
+                : 'تم تسجيل المتدرب بنجاح ✓',
+            style: const TextStyle(fontFamily: 'Cairo'),
+          ),
           backgroundColor: AppColors.success,
         ),
       );
     } catch (e) {
       if (!mounted) return;
+      if (_isCapacityReached(e) && existingWaitlistId == null) {
+        setState(() => _loading = false);
+        final join = await _confirmJoinWaitlist();
+        if (!mounted || !join) return;
+        setState(() => _loading = true);
+        await _joinWaitlistAndClose(cohortId);
+        return;
+      }
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(AppErrorHandler.friendlyMessage(e)), backgroundColor: AppColors.error),
       );
