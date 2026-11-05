@@ -7,7 +7,7 @@ class PaymentsRepository {
   Future<Map<String, dynamic>?> getEnrollmentFinancialSummary(
       String enrollmentId) async {
     final response = await _client
-        .from('enrollment_financial_summary')
+        .from('enrollment_financial_summary_v2')
         .select()
         .eq('enrollment_id', enrollmentId)
         .maybeSingle();
@@ -17,7 +17,7 @@ class PaymentsRepository {
   Future<List<Map<String, dynamic>>> getEnrollmentsByTrainee(
       String traineeId) async {
     final response = await _client
-        .from('enrollment_financial_summary')
+        .from('enrollment_financial_summary_v2')
         .select()
         .eq('trainee_id', traineeId);
     return List<Map<String, dynamic>>.from(response);
@@ -27,13 +27,16 @@ class PaymentsRepository {
     String? search,
     String? status,
   }) async {
-    var query = _client.from('enrollment_financial_summary').select();
+    var query = _client.from('enrollment_financial_summary_v2').select();
 
     if (status != null && status.isNotEmpty && status != 'all') {
       query = query.eq('payment_status', status);
     } else {
       query = query.neq('payment_status', 'complete');
     }
+
+    query = query.not('legacy_payment_status', 'in',
+        '(dropped,cancelled,canceled,withdrawn,refunded)');
 
     if (search != null && search.trim().isNotEmpty) {
       final s = search.trim();
@@ -50,6 +53,7 @@ class PaymentsRepository {
   }) async {
     var query = _client.from('payments').select('''
         id, amount, currency, method, paid_at, notes, receipt_number, external_reference,
+        payment_refunds(amount),
         enrollments!payments_enrollment_id_fkey(
           id,
           trainees!enrollments_trainee_id_fkey(
@@ -116,6 +120,58 @@ class PaymentsRepository {
       'external_reference': externalReference,
       'performed_by': _client.auth.currentUser!.id,
       'paid_at': (paidAt ?? DateTime.now()).toUtc().toIso8601String(),
+    });
+  }
+
+  Future<List<Map<String, dynamic>>> getEnrollmentInstallments(
+      String enrollmentId) async {
+    final response = await _client
+        .from('installment_schedule')
+        .select('*, payment_allocations(amount)')
+        .eq('enrollment_id', enrollmentId)
+        .order('installment_number');
+    return List<Map<String, dynamic>>.from(response);
+  }
+
+  Future<int> setInstallmentPlan({
+    required String enrollmentId,
+    required List<Map<String, dynamic>> installments,
+    String? notes,
+  }) async {
+    final response = await _client.rpc(
+      'set_installment_plan',
+      params: {
+        'p_enrollment_id': enrollmentId,
+        'p_installments': installments,
+        if (notes != null && notes.trim().isNotEmpty) 'p_notes': notes.trim(),
+      },
+    );
+    return (response as num).toInt();
+  }
+
+  Future<void> addRefund({
+    required String paymentId,
+    required double amount,
+    required String reason,
+  }) async {
+    await _client.from('payment_refunds').insert({
+      'payment_id': paymentId,
+      'amount': amount,
+      'reason': reason,
+      'created_by': _client.auth.currentUser?.id,
+    });
+  }
+
+  Future<void> addFeeAdjustment({
+    required String enrollmentId,
+    required double amount,
+    required String reason,
+  }) async {
+    await _client.from('fee_adjustments').insert({
+      'enrollment_id': enrollmentId,
+      'amount': amount,
+      'reason': reason,
+      'created_by': _client.auth.currentUser?.id,
     });
   }
 

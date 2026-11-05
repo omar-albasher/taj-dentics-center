@@ -204,7 +204,7 @@ trainees!course_waitlist_trainee_id_fkey(
   Future<List<Map<String, dynamic>>> getCohortEnrollments(
       String cohortId) async {
     final response = await _client
-        .from('enrollment_financial_summary')
+        .from('enrollment_financial_summary_v2')
         .select()
         .eq('cohort_id', cohortId);
     return List<Map<String, dynamic>>.from(response);

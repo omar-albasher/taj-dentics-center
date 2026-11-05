@@ -69,7 +69,7 @@ users!trainees_user_id_fkey(
   Future<Map<String, dynamic>> getTraineeProfile(String traineeId) async {
     final results = await Future.wait([
       _client
-          .from('enrollment_financial_summary')
+          .from('enrollment_financial_summary_v2')
           .select()
           .eq('trainee_id', traineeId),
       _client

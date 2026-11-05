@@ -109,6 +109,9 @@ class AppErrorHandler {
     final domainMessage = _domainMessage(e);
     if (domainMessage != null) return domainMessage;
 
+    // Arabic messages raised by domain triggers/RPCs are user-facing
+    if (_containsArabic(e.message)) return e.message.trim();
+
     // Specific PostgreSQL error codes
     switch (code) {
       case '23505': // unique_violation
