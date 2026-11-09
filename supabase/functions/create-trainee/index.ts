@@ -87,7 +87,9 @@ Deno.serve(async (req) => {
       full_name,
       phone: phone ?? null,
       role: requestedRole,
-      is_active: true
+      is_active: true,
+      must_change_password: requestedRole === 'trainee',
+      must_change_password_at: requestedRole === 'trainee' ? new Date().toISOString() : null
     })
 
     if (userInsertError) {

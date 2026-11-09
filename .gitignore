@@ -48,3 +48,12 @@ app.*.map.json
 android/key.properties
 **/*.jks
 **/*.keystore
+
+# Database migration & audit scripts (contain sensitive trainee credentials)
+/*.sql
+/phase2_*.sql
+/auditor_verification_queries.sql
+/verify_live_database.sql
+/final_cleanup_and_patch.sql
+/close_past_cohorts_attendance.sql
+
