@@ -117,8 +117,8 @@ class DashboardScreen extends ConsumerWidget {
                 final fmt = AppFormatters.amount;
                 double getVal(String key) => (data[key] as num?)?.toDouble() ?? 0.0;
 
-                final paidSYP = getVal('total_paid_syp');
-                final paidUSD = getVal('total_paid_usd');
+                final paidSYP = getVal('net_paid_syp');
+                final paidUSD = getVal('net_paid_usd');
                 final profitSYP = getVal('net_profit_syp');
                 final profitUSD = getVal('net_profit_usd');
                 final balanceSYP = getVal('total_balance_syp');
@@ -133,7 +133,7 @@ class DashboardScreen extends ConsumerWidget {
                     color: AppColors.gold,
                   ),
                   _KpiData(
-                    title: 'الإيرادات',
+                    title: 'صافي الإيرادات',
                     value: '${fmt.format(paidSYP.toInt())} ل.س',
                     subtitle: '\$ ${fmt.format(paidUSD.toInt())}',
                     icon: Icons.trending_up,
