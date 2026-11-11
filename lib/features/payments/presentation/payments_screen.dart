@@ -513,6 +513,7 @@ class _EnrollmentsTabState extends ConsumerState<_EnrollmentsTab> {
   final _searchCtrl = TextEditingController();
   String _statusFilter = 'all';
   String _searchQuery = '';
+  bool _includeWithdrawn = false;
   Timer? _debounce;
 
   void _onSearchChanged(String v) {
@@ -534,6 +535,7 @@ class _EnrollmentsTabState extends ConsumerState<_EnrollmentsTab> {
     final params = PaymentFilterParams(
       search: _searchQuery.isEmpty ? null : _searchQuery,
       status: _statusFilter == 'all' ? null : _statusFilter,
+      includeWithdrawn: _includeWithdrawn,
     );
     final enrollmentsAsync = ref.watch(allEnrollmentsProvider(params));
     final fmt = AppFormatters.amount;
@@ -574,7 +576,23 @@ class _EnrollmentsTabState extends ConsumerState<_EnrollmentsTab> {
                 onChanged: _onSearchChanged,
               ),
             ),
-            const SizedBox(width: 12),
+            const SizedBox(width: 8),
+            FilterChip(
+              selected: _includeWithdrawn,
+              label: const Text('إظهار المنسحبين',
+                  style: TextStyle(fontFamily: 'Cairo', fontSize: 12)),
+              selectedColor: AppColors.error.withValues(alpha: 0.15),
+              checkmarkColor: AppColors.error,
+              labelStyle: TextStyle(
+                color: _includeWithdrawn ? AppColors.error : AppColors.textSecondary,
+                fontFamily: 'Cairo',
+              ),
+              side: BorderSide(
+                  color: _includeWithdrawn ? AppColors.error : AppColors.divider),
+              backgroundColor: AppColors.surface,
+              onSelected: (val) => setState(() => _includeWithdrawn = val),
+            ),
+            const SizedBox(width: 8),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 12),
               decoration: BoxDecoration(
@@ -668,7 +686,34 @@ class _EnrollmentsTabState extends ConsumerState<_EnrollmentsTab> {
                                 ],
                               ),
                             ),
-                            _StatusBadge(status: status),
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                if (e['lifecycle_status'] == 'withdrawn') ...[
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 8, vertical: 2),
+                                    decoration: BoxDecoration(
+                                      color: AppColors.error.withValues(alpha: 0.15),
+                                      borderRadius: BorderRadius.circular(8),
+                                      border: Border.all(
+                                          color: AppColors.error.withValues(alpha: 0.5)),
+                                    ),
+                                    child: const Text(
+                                      'منسحب',
+                                      style: TextStyle(
+                                        color: AppColors.error,
+                                        fontFamily: 'Cairo',
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 6),
+                                ],
+                                _StatusBadge(status: status),
+                              ],
+                            ),
                           ],
                         ),
                         SizedBox(height: Responsive.spacing(context, 12)),
@@ -816,6 +861,7 @@ class _OverdueTab extends ConsumerStatefulWidget {
 class _OverdueTabState extends ConsumerState<_OverdueTab> {
   final _searchCtrl = TextEditingController();
   String _searchQuery = '';
+  bool _showWithdrawn = false;
   Timer? _debounce;
 
   void _onSearchChanged(String v) {
@@ -834,37 +880,62 @@ class _OverdueTabState extends ConsumerState<_OverdueTab> {
 
   @override
   Widget build(BuildContext context) {
-    final overdueAsync = ref.watch(overduePaymentsProvider(_searchQuery.isEmpty ? null : _searchQuery));
+    final search = _searchQuery.isEmpty ? null : _searchQuery;
+    final overdueAsync = _showWithdrawn
+        ? ref.watch(withdrawnBalancesProvider(search))
+        : ref.watch(overduePaymentsProvider(search));
     final fmt = AppFormatters.amount;
 
     return Column(
       children: [
-        // ── Search Bar ──
-        TextField(
-          controller: _searchCtrl,
-          style: const TextStyle(color: AppColors.textPrimary, fontFamily: 'Cairo'),
-          decoration: InputDecoration(
-            hintText: 'بحث بالاسم أو الكود أو الكورس...',
-            hintStyle: const TextStyle(color: AppColors.textSecondary, fontFamily: 'Cairo', fontSize: 13),
-            prefixIcon: const Icon(Icons.search, color: AppColors.gold),
-            suffixIcon: _searchQuery.isNotEmpty
-                ? IconButton(
-                    icon: const Icon(Icons.clear, color: AppColors.textSecondary, size: 18),
-                    onPressed: () {
-                      _debounce?.cancel();
-                      _searchCtrl.clear();
-                      setState(() => _searchQuery = '');
-                    },
-                  )
-                : null,
-            filled: true,
-            fillColor: AppColors.surface,
-            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: AppColors.divider)),
-            enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: AppColors.divider)),
-            focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: AppColors.gold, width: 2)),
-          ),
-          onChanged: _onSearchChanged,
+        // ── Search & Filter Bar ──
+        Row(
+          children: [
+            Expanded(
+              child: TextField(
+                controller: _searchCtrl,
+                style: const TextStyle(color: AppColors.textPrimary, fontFamily: 'Cairo'),
+                decoration: InputDecoration(
+                  hintText: 'بحث بالاسم أو الكود أو الكورس...',
+                  hintStyle: const TextStyle(color: AppColors.textSecondary, fontFamily: 'Cairo', fontSize: 13),
+                  prefixIcon: const Icon(Icons.search, color: AppColors.gold),
+                  suffixIcon: _searchQuery.isNotEmpty
+                      ? IconButton(
+                          icon: const Icon(Icons.clear, color: AppColors.textSecondary, size: 18),
+                          onPressed: () {
+                            _debounce?.cancel();
+                            _searchCtrl.clear();
+                            setState(() => _searchQuery = '');
+                          },
+                        )
+                      : null,
+                  filled: true,
+                  fillColor: AppColors.surface,
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: AppColors.divider)),
+                  enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: AppColors.divider)),
+                  focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: AppColors.gold, width: 2)),
+                ),
+                onChanged: _onSearchChanged,
+              ),
+            ),
+            const SizedBox(width: 8),
+            FilterChip(
+              selected: _showWithdrawn,
+              label: const Text('أرصدة المنسحبين',
+                  style: TextStyle(fontFamily: 'Cairo', fontSize: 12)),
+              selectedColor: AppColors.error.withValues(alpha: 0.15),
+              checkmarkColor: AppColors.error,
+              labelStyle: TextStyle(
+                color: _showWithdrawn ? AppColors.error : AppColors.textSecondary,
+                fontFamily: 'Cairo',
+              ),
+              side: BorderSide(
+                  color: _showWithdrawn ? AppColors.error : AppColors.divider),
+              backgroundColor: AppColors.surface,
+              onSelected: (val) => setState(() => _showWithdrawn = val),
+            ),
+          ],
         ),
         SizedBox(height: Responsive.spacing(context, 12)),
         // ── List ──
@@ -880,7 +951,10 @@ class _OverdueTabState extends ConsumerState<_OverdueTab> {
             data: (list) {
               if (list.isEmpty) {
                 return Center(
-                  child: Text('🎉 لا توجد مستحقات متأخرة',
+                  child: Text(
+                      _showWithdrawn
+                          ? '🎉 لا توجد أرصدة لمتدربين منسحبين'
+                          : '🎉 لا توجد مستحقات متأخرة',
                       style: TextStyle(
                           color: AppColors.success,
                           fontFamily: 'Cairo',
@@ -894,9 +968,12 @@ class _OverdueTabState extends ConsumerState<_OverdueTab> {
                     SizedBox(height: Responsive.spacing(context, 8)),
                 itemBuilder: (context, index) {
                   final e = list[index];
-                  final balance = (e['balance_due'] as num?)?.toDouble() ?? 0;
+                  final balance = (e['balance_due'] ?? e['balance'] ?? e['current_balance'] as num?)?.toDouble() ?? 0;
+                  final currency = (e['currency'] as String?) ?? 'SYP';
+                  final sym = currency == 'USD' ? '\$' : 'ل.س';
                   final whatsappNumber = (e['whatsapp_number'] as String?)?.trim();
                   final isValidWa = PhoneUtils.sanitizePhone(whatsappNumber) != null;
+                  final isWithdrawnItem = _showWithdrawn || e['lifecycle_status'] == 'withdrawn';
 
                   return Container(
                     padding: EdgeInsets.all(Responsive.spacing(context, 16)),
@@ -920,12 +997,38 @@ class _OverdueTabState extends ConsumerState<_OverdueTab> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text(e['trainee_name'] ?? '',
-                                  style: TextStyle(
-                                      fontSize: Responsive.fontSize(context, 15),
-                                      fontWeight: FontWeight.w700,
-                                      color: AppColors.textPrimary,
-                                      fontFamily: 'Cairo')),
+                              Row(
+                                children: [
+                                  Text(e['trainee_name'] ?? '',
+                                      style: TextStyle(
+                                          fontSize: Responsive.fontSize(context, 15),
+                                          fontWeight: FontWeight.w700,
+                                          color: AppColors.textPrimary,
+                                          fontFamily: 'Cairo')),
+                                  if (isWithdrawnItem) ...[
+                                    const SizedBox(width: 8),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 6, vertical: 2),
+                                      decoration: BoxDecoration(
+                                        color: AppColors.error.withValues(alpha: 0.15),
+                                        borderRadius: BorderRadius.circular(6),
+                                        border: Border.all(
+                                            color: AppColors.error.withValues(alpha: 0.5)),
+                                      ),
+                                      child: const Text(
+                                        'منسحب',
+                                        style: TextStyle(
+                                          color: AppColors.error,
+                                          fontFamily: 'Cairo',
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ],
+                              ),
                               Text(e['course_name'] ?? '',
                                   style: TextStyle(
                                       fontSize: Responsive.fontSize(context, 12),
@@ -938,7 +1041,7 @@ class _OverdueTabState extends ConsumerState<_OverdueTab> {
                           crossAxisAlignment: CrossAxisAlignment.end,
                           children: [
                             Text(
-                              '${fmt.format(balance.toInt())} ل.س',
+                              '${fmt.format(balance.toInt())} $sym',
                               style: TextStyle(
                                   fontSize: Responsive.fontSize(context, 15),
                                   fontWeight: FontWeight.w900,

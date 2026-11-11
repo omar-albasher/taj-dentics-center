@@ -4,11 +4,16 @@ import '../../../core/utils/phone_utils.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../core/utils/app_formatters.dart';
 import 'package:admin_dashboard/core/widgets/app_error_widget.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/utils/app_error_handler.dart';
+import '../../../core/utils/jwt_utils.dart';
 import '../../../core/utils/responsive.dart';
+import '../../dashboard/data/dashboard_repository.dart';
+import '../../payments/data/payments_repository.dart';
+import '../../payments/presentation/withdraw_enrollment_dialog.dart';
 import '../data/trainees_repository.dart';
 import '../domain/referral_models.dart';
 import '../domain/trainee_model.dart';
@@ -58,6 +63,10 @@ class TraineeProfileScreen extends ConsumerWidget {
 
     final trainee = traineeAsync.value!;
     final data = profileAsync.value ?? <String, dynamic>{};
+
+    final token = Supabase.instance.client.auth.currentSession?.accessToken;
+    final role = JwtUtils.extractRole(token);
+    final isAdmin = role == 'admin';
 
     final traineeName =
         trainee.fullName.isNotEmpty ? trainee.fullName : 'ملف المتدرب';
@@ -286,26 +295,58 @@ class TraineeProfileScreen extends ConsumerWidget {
                     final paid = (e['total_paid'] as num?)?.toDouble() ?? 0;
                     final balance = (e['balance'] as num?)?.toDouble() ?? 0;
                     final status = e['payment_status'] ?? '';
+                    final lifecycle = e['lifecycle_status']?.toString() ?? 'active';
+                    final isWithdrawn = lifecycle == 'withdrawn';
+                    final enrollmentId = e['enrollment_id']?.toString() ?? '';
+                    final courseName = e['course_name']?.toString() ?? '';
+                    final currency = e['currency']?.toString() ?? 'SYP';
+                    final sym = currency == 'USD' ? '\$' : 'ل.س';
 
                     return Column(
                       children: [
-                        _InfoRow(
-                            label: 'الكورس', value: e['course_name'] ?? ''),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: _InfoRow(
+                                  label: 'الكورس', value: courseName),
+                            ),
+                            if (isWithdrawn)
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 8, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: AppColors.error.withValues(alpha: 0.15),
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(
+                                      color: AppColors.error.withValues(alpha: 0.5)),
+                                ),
+                                child: const Text(
+                                  'منسحب',
+                                  style: TextStyle(
+                                    color: AppColors.error,
+                                    fontFamily: 'Cairo',
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
                         _InfoRow(
                             label: 'إجمالي الرسوم',
-                            value: '${_formatAmount(due)} ل.س'),
+                            value: '${_formatAmount(due)} $sym'),
                         _InfoRow(
                             label: 'المدفوع',
-                            value: '${_formatAmount(paid)} ل.س',
+                            value: '${_formatAmount(paid)} $sym',
                             valueColor: AppColors.success),
                         _InfoRow(
                           label: 'المتبقي',
-                          value: '${_formatAmount(balance)} ل.س',
+                          value: '${_formatAmount(balance)} $sym',
                           valueColor:
                               balance > 0 ? AppColors.error : AppColors.success,
                         ),
                         _InfoRow(
-                          label: 'الحالة',
+                          label: 'حالة الدفع',
                           value: status == 'complete'
                               ? 'مكتمل'
                               : status == 'partial'
@@ -317,6 +358,49 @@ class TraineeProfileScreen extends ConsumerWidget {
                                   ? AppColors.warning
                                   : AppColors.error,
                         ),
+                        if (isAdmin && !isWithdrawn && enrollmentId.isNotEmpty) ...[
+                          const SizedBox(height: 8),
+                          Align(
+                            alignment: Alignment.centerLeft,
+                            child: OutlinedButton.icon(
+                              onPressed: () async {
+                                final res = await WithdrawEnrollmentDialog.show(
+                                  context,
+                                  enrollmentId: enrollmentId,
+                                  traineeName: traineeName,
+                                  courseName: courseName,
+                                );
+                                if (res == true) {
+                                  ref.invalidate(traineeProfileProvider(traineeId));
+                                  ref.invalidate(kpisProvider);
+                                  ref.invalidate(overdueProvider);
+                                  ref.invalidate(allEnrollmentsProvider);
+                                  ref.invalidate(overduePaymentsProvider);
+                                  ref.invalidate(withdrawnBalancesProvider);
+                                }
+                              },
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: AppColors.error,
+                                side: const BorderSide(color: AppColors.error),
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 12, vertical: 8),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                              ),
+                              icon: const Icon(Icons.person_remove_outlined,
+                                  size: 16),
+                              label: const Text(
+                                'تسجيل انسحاب',
+                                style: TextStyle(
+                                  fontFamily: 'Cairo',
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
                         const Divider(color: AppColors.divider),
                       ],
                     );

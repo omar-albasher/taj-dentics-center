@@ -75,12 +75,14 @@ Deno.serve(async (req) => {
   // 7. Verify Trainee is enrolled in this session cohort
   const { data: enrollment } = await supabase
     .from('enrollments')
-    .select('id, status')
+    .select('id, status, lifecycle_status')
     .eq('cohort_id', session.cohort_id)
     .eq('trainee_id', trainee.id)
     .maybeSingle()
 
-  if (!enrollment || enrollment.status === 'dropped') {
+  if (!enrollment ||
+      enrollment.status === 'dropped' ||
+      enrollment.lifecycle_status === 'withdrawn') {
     return json({ error: 'غير مصرح: أنت لست مقيداً في هذه الدورة التدريبية' }, 403)
   }
 

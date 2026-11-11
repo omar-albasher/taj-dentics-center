@@ -26,6 +26,7 @@ class PaymentsRepository {
   Future<List<Map<String, dynamic>>> getAllEnrollments({
     String? search,
     String? status,
+    bool includeWithdrawn = false,
   }) async {
     var query = _client.from('enrollment_financial_summary_v2').select();
 
@@ -33,6 +34,10 @@ class PaymentsRepository {
       query = query.eq('payment_status', status);
     } else {
       query = query.neq('payment_status', 'complete');
+    }
+
+    if (!includeWithdrawn) {
+      query = query.neq('lifecycle_status', 'withdrawn');
     }
 
     query = query.not('legacy_payment_status', 'in',
@@ -175,6 +180,82 @@ class PaymentsRepository {
     });
   }
 
+  Future<Map<String, dynamic>> getWithdrawalPreview({
+    required String enrollmentId,
+    int? sessionsOverride,
+  }) async {
+    final response = await _client.rpc(
+      'get_withdrawal_preview',
+      params: {
+        'p_enrollment_id': enrollmentId,
+        'p_sessions_override': sessionsOverride,
+      },
+    );
+    return Map<String, dynamic>.from(response as Map);
+  }
+
+  Future<Map<String, dynamic>> withdrawEnrollment({
+    required String enrollmentId,
+    required String reason,
+    bool writeOffDebt = false,
+    int? sessionsOverride,
+  }) async {
+    final response = await _client.rpc(
+      'withdraw_enrollment',
+      params: {
+        'p_enrollment_id': enrollmentId,
+        'p_reason': reason,
+        'p_write_off_debt': writeOffDebt,
+        'p_sessions_override': sessionsOverride,
+      },
+    );
+    return Map<String, dynamic>.from(response as Map);
+  }
+
+  Future<List<Map<String, dynamic>>> getWithdrawnBalances({
+    String? search,
+  }) async {
+    var query = _client
+        .from('enrollment_financial_summary_v2')
+        .select()
+        .eq('lifecycle_status', 'withdrawn')
+        .gt('balance', 0);
+
+    if (search != null && search.trim().isNotEmpty) {
+      final s = search.trim();
+      query = query.or('trainee_name.ilike.%$s%,course_name.ilike.%$s%');
+    }
+
+    final response = await query.order('balance', ascending: false);
+    final list = List<Map<String, dynamic>>.from(response);
+
+    if (list.isNotEmpty) {
+      final traineeIds = list
+          .map((e) => e['trainee_id'] as String?)
+          .whereType<String>()
+          .toSet()
+          .toList();
+      if (traineeIds.isNotEmpty) {
+        final trainees = await _client
+            .from('trainees')
+            .select('id, whatsapp_number')
+            .inFilter('id', traineeIds);
+        final waMap = {
+          for (var t in (trainees as List))
+            (t['id'] as String): t['whatsapp_number'] as String?
+        };
+        for (var item in list) {
+          final tid = item['trainee_id'] as String?;
+          if (tid != null && waMap.containsKey(tid)) {
+            item['whatsapp_number'] = waMap[tid];
+          }
+        }
+      }
+    }
+
+    return list;
+  }
+
   Future<List<Map<String, dynamic>>> getOverduePayments({
     String? search,
   }) async {
@@ -196,8 +277,14 @@ class PaymentFilterParams {
   final String? search;
   final String? method;
   final String? status;
+  final bool includeWithdrawn;
 
-  const PaymentFilterParams({this.search, this.method, this.status});
+  const PaymentFilterParams({
+    this.search,
+    this.method,
+    this.status,
+    this.includeWithdrawn = false,
+  });
 
   @override
   bool operator ==(Object other) =>
@@ -206,10 +293,11 @@ class PaymentFilterParams {
           runtimeType == other.runtimeType &&
           search == other.search &&
           method == other.method &&
-          status == other.status;
+          status == other.status &&
+          includeWithdrawn == other.includeWithdrawn;
 
   @override
-  int get hashCode => Object.hash(search, method, status);
+  int get hashCode => Object.hash(search, method, status, includeWithdrawn);
 }
 
 final allEnrollmentsProvider =
@@ -217,6 +305,7 @@ final allEnrollmentsProvider =
   return ref.watch(paymentsRepositoryProvider).getAllEnrollments(
         search: params.search,
         status: params.status,
+        includeWithdrawn: params.includeWithdrawn,
       );
 });
 
@@ -231,4 +320,10 @@ final recentPaymentsProvider =
 final overduePaymentsProvider =
     FutureProvider.autoDispose.family<List<Map<String, dynamic>>, String?>((ref, search) {
   return ref.watch(paymentsRepositoryProvider).getOverduePayments(search: search);
+});
+
+final withdrawnBalancesProvider =
+    FutureProvider.autoDispose.family<List<Map<String, dynamic>>, String?>(
+        (ref, search) {
+  return ref.watch(paymentsRepositoryProvider).getWithdrawnBalances(search: search);
 });

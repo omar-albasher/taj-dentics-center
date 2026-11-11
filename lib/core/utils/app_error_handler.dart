@@ -29,6 +29,10 @@ class AppErrorHandler {
     'INVALID_WAITLIST_TRANSITION':
         'لا يمكن تنفيذ هذا الانتقال على طلب الانتظار',
     'ADMIN_ONLY': 'هذه العملية مخصصة للإدارة فقط',
+    'ENROLLMENT_NOT_FOUND': 'التسجيل غير موجود',
+    'ENROLLMENT_NOT_ACTIVE': 'لا يمكن الانسحاب: التسجيل غير نشط أو منسحب مسبقاً',
+    'REFUND_ALLOCATION_FAILED':
+        'تعذر توزيع مبلغ الاسترداد تلقائياً، يرجى إعادة المحاولة',
     'NOT_AUTHORIZED': 'ليس لديك الصلاحيات الكافية لتنفيذ هذا الإجراء',
     'AUTH_REQUIRED': 'انتهت صلاحية الجلسة، يرجى تسجيل الدخول مجدداً',
     'INVALID_TOTAL_DUE': 'قيمة المبلغ المطلوب غير صالحة',
