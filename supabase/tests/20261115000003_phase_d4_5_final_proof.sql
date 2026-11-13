@@ -8,7 +8,7 @@ SELECT DISTINCT table_name
 FROM public.audit_log 
 ORDER BY 1;
 
--- 2. Authoritative check of active triggers and enabled status across all 9 audited tables
+-- 2. Authoritative check of active triggers and enabled status across all 11 audited tables
 SELECT 
     c.relname AS table_name,
     t.tgname  AS trigger_name,
@@ -23,6 +23,8 @@ WHERE n.nspname = 'public'
       'payments',
       'enrollments',
       'expenses',
+      'attendance',
+      'sessions',
       'payment_refunds',
       'fee_adjustments',
       'enrollment_withdrawals',
