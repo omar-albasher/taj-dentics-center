@@ -88,6 +88,8 @@ class AuditRepository {
     'payments',
     'enrollments',
     'expenses',
+    'attendance',
+    'sessions',
     'payment_refunds',
     'fee_adjustments',
     'enrollment_withdrawals',
