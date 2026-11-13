@@ -96,6 +96,7 @@ class AuditRepository {
     'course_materials',
     'installment_schedule',
     'payment_allocations',
+    'users',
   ];
 
   Future<AuditQueryResult> fetchLogs(AuditFilterParams params) async {

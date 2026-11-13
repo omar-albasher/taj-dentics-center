@@ -8,7 +8,7 @@ SELECT DISTINCT table_name
 FROM public.audit_log 
 ORDER BY 1;
 
--- 2. Authoritative check of active triggers and enabled status across all 11 audited tables
+-- 2. Authoritative check of active triggers and enabled status across all 12 audited tables
 SELECT 
     c.relname AS table_name,
     t.tgname  AS trigger_name,
@@ -30,7 +30,8 @@ WHERE n.nspname = 'public'
       'enrollment_withdrawals',
       'course_materials',
       'installment_schedule',
-      'payment_allocations'
+      'payment_allocations',
+      'users'
   )
   AND (t.tgname ILIKE '%audit%' OR pg_get_triggerdef(t.oid) ILIKE '%audit%')
 ORDER BY c.relname, t.tgname;

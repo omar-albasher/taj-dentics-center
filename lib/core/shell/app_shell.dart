@@ -199,6 +199,9 @@ class _SideNav extends ConsumerWidget {
               children: _items.where((item) {
                 if (item.path == AppRouter.dentalLab && !isAdmin) return false;
                 if (item.path == AppRouter.audit && !isAdmin) return false;
+                if (item.path == AppRouter.users && !isAdmin) return false;
+                if (item.path == AppRouter.reports && !isAdmin) return false;
+                if (item.path == AppRouter.expenses && !isAdmin) return false;
                 return true;
               }).map((item) {
                 final isActive = location == item.path ||

@@ -259,6 +259,7 @@ class _CommandPaletteDialogState extends State<CommandPaletteDialog> {
         keywords: ['تقارير', 'إحصائيات', 'أرباح', 'reports', 'analytics'],
         icon: Icons.bar_chart_outlined,
         category: CommandCategory.navigation,
+        adminOnly: true,
         onSelect: () {
           Navigator.of(context).pop();
           context.go(AppRouter.reports);

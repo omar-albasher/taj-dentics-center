@@ -123,9 +123,13 @@ class AppRouter {
           '[Router] path=${state.matchedLocation} role="$role" authorized=$isAuthorized');
     }
 
-    if ((state.matchedLocation.startsWith(dentalLab) ||
-            state.matchedLocation.startsWith(audit)) &&
-        role != 'admin') {
+    final isAdminOnlyRoute = state.matchedLocation.startsWith(dentalLab) ||
+        state.matchedLocation.startsWith(audit) ||
+        state.matchedLocation.startsWith(users) ||
+        state.matchedLocation.startsWith(reports) ||
+        state.matchedLocation.startsWith(expenses);
+
+    if (isAdminOnlyRoute && role != 'admin') {
       return dashboard;
     }
 

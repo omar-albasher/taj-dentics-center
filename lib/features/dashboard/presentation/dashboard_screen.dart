@@ -132,37 +132,39 @@ class DashboardScreen extends ConsumerWidget {
                     icon: Icons.people,
                     color: AppColors.gold,
                   ),
-                  _KpiData(
-                    title: 'صافي الإيرادات',
-                    value: '${fmt.format(paidSYP.toInt())} ل.س',
-                    subtitle: '\$ ${fmt.format(paidUSD.toInt())}',
-                    icon: Icons.trending_up,
-                    color: AppColors.success,
-                  ),
-                  _KpiData(
-                    title: 'صافي الربح',
-                    value: '${fmt.format(profitSYP.toInt())} ل.س',
-                    subtitle: '\$ ${fmt.format(profitUSD.toInt())}',
-                    icon: Icons.account_balance,
-                    color: AppColors.darkGreen,
-                  ),
-                  _KpiData(
-                    title: 'المستحقات',
-                    value: '${fmt.format(balanceSYP.toInt())} ل.س',
-                    subtitle:
-                        '\$ ${fmt.format(balanceUSD.toInt())} (${data['partial_count'] ?? 0} جزئي • ${data['unpaid_count'] ?? 0} غير مدفوع)',
-                    icon: Icons.warning_amber,
-                    color: AppColors.warning,
-                  ),
+                  if (isAdmin) ...[
+                    _KpiData(
+                      title: 'صافي الإيرادات',
+                      value: '${fmt.format(paidSYP.toInt())} ل.س',
+                      subtitle: '\$ ${fmt.format(paidUSD.toInt())}',
+                      icon: Icons.trending_up,
+                      color: AppColors.success,
+                    ),
+                    _KpiData(
+                      title: 'صافي الربح',
+                      value: '${fmt.format(profitSYP.toInt())} ل.س',
+                      subtitle: '\$ ${fmt.format(profitUSD.toInt())}',
+                      icon: Icons.account_balance,
+                      color: AppColors.darkGreen,
+                    ),
+                    _KpiData(
+                      title: 'المستحقات',
+                      value: '${fmt.format(balanceSYP.toInt())} ل.س',
+                      subtitle:
+                          '\$ ${fmt.format(balanceUSD.toInt())} (${data['partial_count'] ?? 0} جزئي • ${data['unpaid_count'] ?? 0} غير مدفوع)',
+                      icon: Icons.warning_amber,
+                      color: AppColors.warning,
+                    ),
+                  ],
                 ];
 
                 return GridView.count(
-                  crossAxisCount: isDesktop ? 4 : 2,
+                  crossAxisCount: isDesktop ? (isAdmin ? 4 : 1) : (isAdmin ? 2 : 1),
                   shrinkWrap: true,
                   physics: const NeverScrollableScrollPhysics(),
                   crossAxisSpacing: Responsive.spacing(context, 16),
                   mainAxisSpacing: Responsive.spacing(context, 16),
-                  childAspectRatio: isDesktop ? 1.5 : 0.5,
+                  childAspectRatio: isDesktop ? (isAdmin ? 1.5 : 3.0) : 1.2,
                   children: kpis.map((k) => _KpiCard(data: k)).toList(),
                 );
               },
