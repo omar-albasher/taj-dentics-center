@@ -15,6 +15,8 @@ class _ExportDataDialogState extends ConsumerState<ExportDataDialog> {
   bool _isLoading = false;
   String? _errorMessage;
   Map<String, dynamic>? _exportedSummary;
+  String? _exportVersion;
+  String? _auditFilterApplied;
 
   Future<void> _handleExport() async {
     setState(() {
@@ -25,17 +27,21 @@ class _ExportDataDialogState extends ConsumerState<ExportDataDialog> {
     try {
       final repo = ref.read(backupRepositoryProvider);
       final data = await repo.exportSystemData();
-      
+
       // حفظ وتنزيل الملف
       await repo.saveExportToFile(data);
 
       final metadata = data['metadata'] as Map<String, dynamic>? ?? {};
       final counts = metadata['counts'] as Map<String, dynamic>? ?? {};
+      final version = metadata['version']?.toString() ?? '2.0.0';
+      final auditFilter = metadata['audit_filter_applied']?.toString();
 
       if (mounted) {
         setState(() {
           _isLoading = false;
           _exportedSummary = counts;
+          _exportVersion = version;
+          _auditFilterApplied = auditFilter;
         });
       }
     } catch (e) {
@@ -57,8 +63,8 @@ class _ExportDataDialogState extends ConsumerState<ExportDataDialog> {
         side: const BorderSide(color: AppColors.divider),
       ),
       child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 580),
-        child: Padding(
+        constraints: const BoxConstraints(maxWidth: 680),
+        child: SingleChildScrollView(
           padding: const EdgeInsets.all(24),
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -94,7 +100,7 @@ class _ExportDataDialogState extends ConsumerState<ExportDataDialog> {
                           ),
                         ),
                         Text(
-                          'System Data Export (JSON)',
+                          'System Data Export v2.0.0 (JSON)',
                           style: TextStyle(
                             fontFamily: 'Cairo',
                             fontSize: 12,
@@ -117,7 +123,7 @@ class _ExportDataDialogState extends ConsumerState<ExportDataDialog> {
 
               // Description
               const Text(
-                'تقوم هذه الميزة بتجهيز وتنزيل ملف JSON شامل يحتوي على نسخة كاملة لبيانات العمل الحالية بالمركز، للحفظ والأرشفة المستقلة خارج السيرفر.',
+                'تقوم هذه الميزة بتجهيز وتنزيل ملف JSON شامل يحتوي على نسخة كاملة لبيانات العمل الحالية بالمركز والمخبر (27 جدولاً)، للحفظ والأرشفة المستقلة خارج السيرفر.',
                 style: TextStyle(
                   fontFamily: 'Cairo',
                   fontSize: 13,
@@ -190,7 +196,7 @@ class _ExportDataDialogState extends ConsumerState<ExportDataDialog> {
               if (_exportedSummary != null) ...[
                 const SizedBox(height: 18),
                 Container(
-                  padding: const EdgeInsets.all(14),
+                  padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
                     color: AppColors.success.withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(12),
@@ -199,45 +205,105 @@ class _ExportDataDialogState extends ConsumerState<ExportDataDialog> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Row(
+                      Row(
                         children: [
-                          Icon(Icons.check_circle_outline, color: AppColors.success, size: 20),
-                          SizedBox(width: 8),
+                          const Icon(Icons.check_circle_outline, color: AppColors.success, size: 22),
+                          const SizedBox(width: 8),
                           Text(
-                            'تم تصدير وتنزيل الملف بنجاح!',
-                            style: TextStyle(
+                            'تم تصدير وتنزيل الملف بنجاح! (الإصدار ${_exportVersion ?? '2.0.0'})',
+                            style: const TextStyle(
                               fontFamily: 'Cairo',
-                              fontSize: 13,
+                              fontSize: 14,
                               fontWeight: FontWeight.w700,
                               color: AppColors.success,
                             ),
                           ),
                         ],
                       ),
-                      const SizedBox(height: 10),
-                      const Text(
-                        'ملخص محتويات النسخة المصدرة:',
-                        style: TextStyle(
-                          fontFamily: 'Cairo',
-                          fontSize: 11,
-                          color: AppColors.textSecondary,
+                      if (_auditFilterApplied != null) ...[
+                        const SizedBox(height: 6),
+                        Text(
+                          'تصفية التدقيق المطبقة: منذ ${_auditFilterApplied!.substring(0, 10)} (آخر 90 يوماً افتراضياً)',
+                          style: const TextStyle(
+                            fontFamily: 'Cairo',
+                            fontSize: 11,
+                            color: AppColors.textSecondary,
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 8),
+                      ],
+                      const SizedBox(height: 14),
+
+                      // Group 1: Academic
+                      _SectionHeader(title: 'القطاع الأكاديمي والتدريب:'),
+                      const SizedBox(height: 6),
                       Wrap(
                         spacing: 8,
                         runSpacing: 6,
                         children: [
                           _SummaryChip(label: 'المتدربون', count: _exportedSummary!['trainees']),
-                          _SummaryChip(label: 'التسجيلات', count: _exportedSummary!['enrollments']),
-                          _SummaryChip(label: 'الدفعات', count: _exportedSummary!['payments']),
-                          _SummaryChip(label: 'الجلسات', count: _exportedSummary!['sessions']),
-                          _SummaryChip(label: 'الحضور', count: _exportedSummary!['attendance']),
                           _SummaryChip(label: 'الكورسات', count: _exportedSummary!['courses']),
                           _SummaryChip(label: 'المجموعات', count: _exportedSummary!['cohorts']),
+                          _SummaryChip(label: 'التسجيلات', count: _exportedSummary!['enrollments']),
+                          _SummaryChip(label: 'الجلسات', count: _exportedSummary!['sessions']),
+                          _SummaryChip(label: 'الحضور', count: _exportedSummary!['attendance']),
+                          _SummaryChip(label: 'المواد التدريبية', count: _exportedSummary!['course_materials']),
+                          _SummaryChip(label: 'قائمة الانتظار', count: _exportedSummary!['course_waitlist']),
+                          _SummaryChip(label: 'الإحالات', count: _exportedSummary!['referrals']),
+                        ],
+                      ),
+
+                      const SizedBox(height: 12),
+                      // Group 2: Financial
+                      _SectionHeader(title: 'السجلات والعمليات المالية:'),
+                      const SizedBox(height: 6),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 6,
+                        children: [
+                          _SummaryChip(label: 'الدفعات', count: _exportedSummary!['payments']),
                           _SummaryChip(label: 'المصاريف', count: _exportedSummary!['expenses']),
-                          _SummaryChip(label: 'الاستبيانات', count: _exportedSummary!['survey_responses']),
+                          _SummaryChip(label: 'الأقساط المجدولة', count: _exportedSummary!['installment_schedule']),
+                          _SummaryChip(label: 'تخصيص الدفعات', count: _exportedSummary!['payment_allocations']),
+                          _SummaryChip(label: 'الاستردادات', count: _exportedSummary!['payment_refunds']),
+                          _SummaryChip(label: 'تعديلات الرسوم', count: _exportedSummary!['fee_adjustments']),
+                          _SummaryChip(label: 'الانسحابات', count: _exportedSummary!['enrollment_withdrawals']),
+                          _SummaryChip(label: 'الأهداف الشهرية', count: _exportedSummary!['monthly_targets']),
+                        ],
+                      ),
+
+                      const SizedBox(height: 12),
+                      // Group 3: Dental Lab
+                      _SectionHeader(title: 'مخبر الأسنان:'),
+                      const SizedBox(height: 6),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 6,
+                        children: [
+                          _SummaryChip(label: 'عملاء المخبر', count: _exportedSummary!['lab_clients']),
+                          _SummaryChip(label: 'فواتير المخبر', count: _exportedSummary!['lab_invoices']),
+                          _SummaryChip(label: 'بنود الفواتير', count: _exportedSummary!['lab_invoice_items']),
+                          _SummaryChip(label: 'دفعات المخبر', count: _exportedSummary!['lab_payments']),
+                          _SummaryChip(label: 'مصاريف المخبر', count: _exportedSummary!['lab_expenses']),
+                        ],
+                      ),
+
+                      const SizedBox(height: 12),
+                      // Group 4: System & Surveys & Audit
+                      _SectionHeader(title: 'النظام والاستبيانات وسجل التدقيق:'),
+                      const SizedBox(height: 6),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 6,
+                        children: [
                           _SummaryChip(label: 'المستخدمون', count: _exportedSummary!['users']),
+                          _SummaryChip(
+                            label: 'سجل التدقيق (آخر 90 يوماً افتراضياً)',
+                            count: _exportedSummary!['audit_log'],
+                            isHighlighted: true,
+                          ),
+                          _SummaryChip(label: 'نماذج الاستبيان', count: _exportedSummary!['survey_templates']),
+                          _SummaryChip(label: 'إرسال الاستبيانات', count: _exportedSummary!['survey_dispatches']),
+                          _SummaryChip(label: 'ردود الاستبيان', count: _exportedSummary!['survey_responses']),
                         ],
                       ),
                     ],
@@ -346,28 +412,54 @@ class _ExportDataDialogState extends ConsumerState<ExportDataDialog> {
   }
 }
 
+class _SectionHeader extends StatelessWidget {
+  final String title;
+
+  const _SectionHeader({required this.title});
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      title,
+      style: const TextStyle(
+        fontFamily: 'Cairo',
+        fontSize: 12,
+        fontWeight: FontWeight.w700,
+        color: AppColors.gold,
+      ),
+    );
+  }
+}
+
 class _SummaryChip extends StatelessWidget {
   final String label;
   final dynamic count;
+  final bool isHighlighted;
 
-  const _SummaryChip({required this.label, required this.count});
+  const _SummaryChip({
+    required this.label,
+    required this.count,
+    this.isHighlighted = false,
+  });
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: AppColors.surface,
+        color: isHighlighted ? AppColors.gold.withValues(alpha: 0.15) : AppColors.surface,
         borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: AppColors.divider.withValues(alpha: 0.6)),
+        border: Border.all(
+          color: isHighlighted ? AppColors.gold : AppColors.divider.withValues(alpha: 0.6),
+        ),
       ),
       child: Text(
         '$label: ${count ?? 0}',
-        style: const TextStyle(
+        style: TextStyle(
           fontFamily: 'Cairo',
           fontSize: 11,
-          color: AppColors.textPrimary,
-          fontWeight: FontWeight.w600,
+          color: isHighlighted ? AppColors.gold : AppColors.textPrimary,
+          fontWeight: isHighlighted ? FontWeight.w700 : FontWeight.w600,
         ),
       ),
     );

@@ -198,6 +198,7 @@ class _SideNav extends ConsumerWidget {
               padding: const EdgeInsets.symmetric(horizontal: 12),
               children: _items.where((item) {
                 if (item.path == AppRouter.dentalLab && !isAdmin) return false;
+                if (item.path == AppRouter.audit && !isAdmin) return false;
                 return true;
               }).map((item) {
                 final isActive = location == item.path ||

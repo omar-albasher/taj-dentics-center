@@ -6,9 +6,10 @@ class ReportsRepository {
 
   Future<List<Map<String, dynamic>>> getProfitLossReport() async {
     final response = await _client
-        .from('profit_loss_report')
+        .from('profit_loss_report_v2')
         .select()
-        .order('month', ascending: false);
+        .order('month', ascending: false)
+        .order('currency', ascending: true);
     return List<Map<String, dynamic>>.from(response);
   }
 
@@ -20,10 +21,10 @@ class ReportsRepository {
     return List<Map<String, dynamic>>.from(response);
   }
 
-  // Pre-aggregated SQL view for fast course revenue
+  // Pre-aggregated SQL view for fast course revenue (v2)
   Future<List<Map<String, dynamic>>> getCourseRevenueReport() async {
     final response = await _client
-        .from('course_revenue_sql_summary')
+        .from('course_revenue_sql_summary_v2')
         .select()
         .order('total_paid', ascending: false);
     return List<Map<String, dynamic>>.from(response);
@@ -37,18 +38,18 @@ class ReportsRepository {
     return List<Map<String, dynamic>>.from(response);
   }
 
-  // ─── New Phase 4.5 Reports ───
+  // ─── Phase D4.4 Reports (v2) ───
   Future<List<Map<String, dynamic>>> getRevenueByMethod() async {
     final response = await _client
-        .from('revenue_by_method_report')
+        .from('revenue_by_method_report_v2')
         .select()
-        .order('total_amount', ascending: false);
+        .order('gross_collected', ascending: false);
     return List<Map<String, dynamic>>.from(response);
   }
 
   Future<List<Map<String, dynamic>>> getDiscountsReport() async {
     final response = await _client
-        .from('discounts_report')
+        .from('discounts_report_v2')
         .select()
         .order('total_discounts', ascending: false);
     return List<Map<String, dynamic>>.from(response);
@@ -56,22 +57,22 @@ class ReportsRepository {
 
   Future<List<Map<String, dynamic>>> getDebtAgingReport() async {
     final response = await _client
-        .from('debt_aging_report')
+        .from('debt_aging_report_v2')
         .select()
-        .order('total_overdue_balance', ascending: false);
+        .order('currency', ascending: true);
     return List<Map<String, dynamic>>.from(response);
   }
 
   Future<List<Map<String, dynamic>>> getExpensesByCategory() async {
     final response = await _client
-        .from('expenses_by_category_report')
+        .from('expenses_by_category_report_v2')
         .select()
         .order('total_spent', ascending: false);
     return List<Map<String, dynamic>>.from(response);
   }
 
   Future<List<Map<String, dynamic>>> getCashVsAccrual() async {
-    final response = await _client.from('cash_vs_accrual_kpis').select();
+    final response = await _client.from('cash_vs_accrual_kpis_v2').select();
     return List<Map<String, dynamic>>.from(response);
   }
 }

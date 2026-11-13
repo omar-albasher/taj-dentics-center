@@ -10,7 +10,11 @@ class DashboardRepository {
   }
 
   Future<List<Map<String, dynamic>>> getMonthlyRevenue() async {
-    final response = await _client.from('profit_loss_report').select();
+    final response = await _client
+        .from('profit_loss_report_v2')
+        .select()
+        .order('month', ascending: false)
+        .order('currency', ascending: true);
     return List<Map<String, dynamic>>.from(response);
   }
 
