@@ -199,9 +199,20 @@ BEGIN
 END;
 $$;
 
--- pgcrypto lives in the extensions schema; PIN helpers must resolve crypt/gen_salt
-ALTER FUNCTION public.set_user_pin(text) SET search_path = public, extensions, pg_temp;
-ALTER FUNCTION public.verify_user_pin(text) SET search_path = public, extensions, pg_temp;
+-- pgcrypto lives in the extensions schema; PIN helpers must resolve crypt/gen_salt if present.
+-- Guarded: phase9 (20261021000002) was never applied live; functions are created
+-- later by 20261116000010_phase_d5_pin_security_rebuild. A fresh replay must not
+-- fail here when the functions do not exist yet.
+DO $$
+BEGIN
+  IF to_regprocedure('public.set_user_pin(text)') IS NOT NULL THEN
+    ALTER FUNCTION public.set_user_pin(text) SET search_path = public, extensions, pg_temp;
+  END IF;
+  IF to_regprocedure('public.verify_user_pin(text)') IS NOT NULL THEN
+    ALTER FUNCTION public.verify_user_pin(text) SET search_path = public, extensions, pg_temp;
+  END IF;
+END;
+$$;
 
 -- ----------------------------------------------------------------------------
 -- 5. Expand reception payment methods & enforce performed_by = auth.uid()
