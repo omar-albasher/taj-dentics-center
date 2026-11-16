@@ -1,12 +1,9 @@
-import 'dart:math';
-
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../domain/session_model.dart';
 
 class AdminSessionsRepository {
   final _client = Supabase.instance.client;
-  final _random = Random.secure();
 
   Future<List<AdminSessionModel>> getSessions() async {
     final response = await _client.from('sessions').select('''
@@ -28,47 +25,30 @@ class AdminSessionsRepository {
     String? description,
     int durationMinutes = 120,
   }) async {
-    await _client.from('sessions').insert({
-      'cohort_id': cohortId,
-      'session_number': sessionNumber,
-      'scheduled_at': scheduledAt.toUtc().toIso8601String(),
-      'is_extra': isExtra,
-      if (title != null && title.isNotEmpty) 'title': title,
-      if (description != null && description.isNotEmpty) 'description': description,
-      'duration_minutes': durationMinutes,
+    // Atomic server-side insert: validates staff role, cohort, numbering and
+    // duration before touching RLS-protected sessions (reception has SELECT only).
+    await _client.rpc('create_session', params: {
+      'p_cohort_id': cohortId,
+      'p_session_number': sessionNumber,
+      'p_scheduled_at': scheduledAt.toUtc().toIso8601String(),
+      'p_duration_minutes': durationMinutes,
+      'p_is_extra': isExtra,
+      'p_title': (title != null && title.trim().isNotEmpty) ? title.trim() : null,
+      'p_description':
+          (description != null && description.trim().isNotEmpty) ? description.trim() : null,
     });
   }
 
   Future<void> openSession(String sessionId) async {
-    try {
-      // استدعاء RPC السيرفر الذرية والآمنة
-      await _client.rpc('open_session', params: {'p_session_id': sessionId});
-    } catch (_) {
-      // احتياطي مباشر في حال عدم تفعيل الـ RPC بعد
-      final qrToken = _generateUuid();
-      await _client
-          .from('sessions')
-          .update({
-            'status': 'open',
-            'qr_token': qrToken,
-            'opened_at': DateTime.now().toUtc().toIso8601String(),
-            'opened_by': _client.auth.currentUser!.id,
-          })
-          .eq('id', sessionId)
-          .eq('status', 'scheduled');
-    }
+    // Atomic server-side open: generates UUID qr_token, marks open, and
+    // records opener; callable by admin and reception.
+    await _client.rpc('open_session', params: {'p_session_id': sessionId});
   }
 
   Future<void> closeSession(String sessionId) async {
-    await _client
-        .from('sessions')
-        .update({
-          'status': 'closed',
-          // Preserve qr_token to allow offline sync within 30-minute grace window
-          'closed_at': DateTime.now().toUtc().toIso8601String(),
-        })
-        .eq('id', sessionId)
-        .eq('status', 'open');
+    // Atomic server-side close: refuses non-open sessions instead of silently
+    // succeeding on zero updated rows; qr_token is preserved for sync grace.
+    await _client.rpc('close_session', params: {'p_session_id': sessionId});
   }
 
   Future<Map<String, dynamic>> bulkScheduleSessions({
@@ -123,15 +103,6 @@ class AdminSessionsRepository {
           )
         ''').eq('cohort_id', cohortId);
     return List<Map<String, dynamic>>.from(response);
-  }
-
-  String _generateUuid() {
-    final bytes = List<int>.generate(16, (_) => _random.nextInt(256));
-    bytes[6] = (bytes[6] & 0x0f) | 0x40;
-    bytes[8] = (bytes[8] & 0x3f) | 0x80;
-    final hex = bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
-    return '${hex.substring(0, 8)}-${hex.substring(8, 12)}-'
-        '${hex.substring(12, 16)}-${hex.substring(16, 20)}-${hex.substring(20)}';
   }
 }
 
