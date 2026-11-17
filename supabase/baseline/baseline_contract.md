@@ -5,7 +5,7 @@
 **Authoritative Raw Dump:** `supabase/baseline/schema_live_20261117.sql` (319,289 bytes, 9,856 lines)  
 **Canonical Rebuild File:** `supabase/baseline/canonical_foundation.sql` (LF-only, zero BOM, client directives stripped, safe schema creation)  
 **Validation Fingerprint:** `bacff6e12c60748988fc0831fe4307ec`  
-**Status:** Certified Post-D5 Canonical Baseline (Live-certified; Cold-start pending verification on secondary project)
+**Status:** Certified Post-D5 Canonical Baseline (Cold-start Verified 16/17 on secondary project; Fingerprint Match 100%)
 
 ---
 
