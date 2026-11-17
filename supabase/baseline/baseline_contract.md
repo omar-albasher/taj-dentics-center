@@ -58,7 +58,7 @@ Components outside the `public` schema are maintained in modular files under `su
    - Required by push worker `dispatch_push_batch`:
      - `project_url`
      - `cron_secret`
-     - `push_function_slug`: Canonical slug is `send-fcm-notification` (Note: The live production environment historically uses `bright-endpoint`, mapped in live Vault for seamless continuity).
+     - `push_function_slug`: Canonical default is `send-fcm-notification`. Replay scripts only create this secret if missing and strictly preserve any existing custom or historical live slug (such as production's `bright-endpoint`).
    - Guarded against executing raw unconfigured placeholders.
 3. **Storage (`supabase/platform/storage.sql`):**
    - Bucket: `course-materials` (private).
