@@ -58,8 +58,8 @@ Components outside the `public` schema are maintained in modular files under `su
    - Required by push worker `dispatch_push_batch`:
      - `project_url`
      - `cron_secret`
-     - `push_function_slug`
-   - *Note (Task #54):* In the live database, these secrets are currently missing, which causes `dispatch_push_batch` to fail on each cron tick until provisioned.
+     - `push_function_slug` (defaults to `send-fcm-notification`)
+   - Guarded against executing raw unconfigured placeholders.
 3. **Storage (`supabase/platform/storage.sql`):**
    - Bucket: `course-materials` (private).
    - Policies on `storage.objects`:
@@ -74,6 +74,9 @@ Components outside the `public` schema are maintained in modular files under `su
      - `enqueue_payment_reminders` (`0 7 * * 0`)
 5. **Auth Hooks (`supabase/platform/auth_hooks.md`):**
    - Custom Access Token Hook points to `public.custom_access_token_hook(jsonb)`.
+6. **Edge Functions & Environment Secrets:**
+   - Functions: `manage-user`, `send-fcm-notification`, `create-trainee`, `smart-responder`.
+   - Function Secrets: `CRON_SECRET`, `FIREBASE_SERVICE_ACCOUNT`, `SERVICE_ROLE_KEY` (or `SUPABASE_SERVICE_ROLE_KEY`).
 
 ---
 
@@ -93,16 +96,18 @@ Components outside the `public` schema are maintained in modular files under `su
 
 ## 5. Cold-Start Rebuild Sequence & Verification Protocol
 ### Sequential Execution Order:
-1. `supabase/platform/extensions.sql`
-2. `supabase/baseline/canonical_foundation.sql`
-3. `supabase/platform/storage.sql`
-4. `supabase/platform/cron_jobs.sql`
-5. `supabase/platform/vault_secrets.sql` (Provision actual environment secrets)
-6. Configure Auth Hook in Dashboard (`supabase/platform/auth_hooks.md`)
-7. Run Verification Script:
+1. `supabase/platform/extensions.sql` (Enable 6 platform extensions)
+2. `supabase/baseline/canonical_foundation.sql` (Create canonical public schema)
+3. `supabase/platform/storage.sql` (Create bucket & storage policies)
+4. `supabase/platform/cron_jobs.sql` (Register 5 core cron jobs)
+5. Deploy Edge Functions (`manage-user`, `send-fcm-notification`, `create-trainee`, `smart-responder`)
+6. Configure Edge Function Secrets (`CRON_SECRET`, `FIREBASE_SERVICE_ACCOUNT`)
+7. `supabase/platform/vault_secrets.sql` (Provide real project URL, cron secret, and push slug)
+8. Configure Auth Hook in Dashboard (`supabase/platform/auth_hooks.md`)
+9. Run Verification Script:
    ```sql
    \i supabase/baseline/validate_rebuild.sql
    ```
 * **Expected Outcome:**
-  - Automatically achieves **16/17 PASS** prior to vault secret population.
-  - Achieves **17/17 PASS** once the 3 push scheduler vault secrets are provisioned.
+  - All 17 checks evaluated: **17/17 PASS**.
+  - Verified policy fingerprint: `bacff6e12c60748988fc0831fe4307ec`.
