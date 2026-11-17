@@ -70,7 +70,7 @@ BEGIN
     );
 
   -- 4. Check platform dependencies
-  IF EXISTS (SELECT 1 FROM pg_tables WHERE schemaname = 'storage' AND tablename = 'buckets') THEN
+  IF to_regclass('storage.buckets') IS NOT NULL THEN
     SELECT EXISTS (SELECT 1 FROM storage.buckets WHERE id = 'course-materials') INTO v_storage_bucket;
   END IF;
 
@@ -78,7 +78,7 @@ BEGIN
   FROM pg_policies
   WHERE schemaname = 'storage' AND tablename = 'objects';
 
-  IF EXISTS (SELECT 1 FROM pg_tables WHERE schemaname = 'cron' AND tablename = 'job') THEN
+  IF to_regclass('cron.job') IS NOT NULL THEN
     SELECT count(DISTINCT command) INTO v_cron_jobs
     FROM cron.job
     WHERE active = true
@@ -95,7 +95,7 @@ BEGIN
   FROM pg_extension
   WHERE extname IN ('uuid-ossp', 'pgcrypto', 'pg_stat_statements', 'pg_net', 'pg_cron', 'supabase_vault');
 
-  IF EXISTS (SELECT 1 FROM pg_tables WHERE schemaname = 'vault' AND tablename = 'decrypted_secrets') THEN
+  IF to_regclass('vault.decrypted_secrets') IS NOT NULL THEN
     SELECT count(*) INTO v_vault_secrets
     FROM vault.decrypted_secrets
     WHERE name IN ('project_url', 'cron_secret', 'push_function_slug');
