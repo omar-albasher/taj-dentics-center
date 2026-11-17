@@ -1,7 +1,8 @@
 -- ============================================================================
 -- Rebuild Validation Script (#47)
 --
--- Compares public schema state against the authoritative baseline fingerprint.
+-- Compares database and platform state against the authoritative baseline.
+-- Checks both core public schema invariants and external platform dependencies.
 -- Safe, read-only verification that returns a summary table of all checks.
 -- ============================================================================
 
@@ -28,8 +29,14 @@ DECLARE
   v_rls_forced integer;
   v_fingerprint text;
   v_unpinned integer;
+  -- Platform metrics
+  v_storage_bucket boolean := false;
+  v_storage_policies integer := 0;
+  v_cron_jobs integer := 0;
+  v_extensions integer := 0;
+  v_vault_secrets integer := 0;
 BEGIN
-  -- 1. Gather live counts
+  -- 1. Gather public schema counts
   SELECT count(*) INTO v_tables FROM pg_tables WHERE schemaname = 'public';
   SELECT count(*) INTO v_views FROM pg_views WHERE schemaname = 'public';
   SELECT count(*) INTO v_functions FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace WHERE n.nspname = 'public';
@@ -41,7 +48,7 @@ BEGIN
   SELECT count(*) INTO v_rls_enabled FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'public' AND c.relkind = 'r' AND c.relrowsecurity;
   SELECT count(*) INTO v_rls_forced FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'public' AND c.relkind = 'r' AND c.relforcerowsecurity;
 
-  -- 2. Compute policy fingerprint
+  -- 2. Compute public policy fingerprint
   SELECT md5(string_agg(
            schemaname || '.' || tablename || ':' || policyname || ':' ||
            cmd || ':' || roles::text || ':' || COALESCE(qual, '') || ':' ||
@@ -62,6 +69,29 @@ BEGIN
       WHERE c LIKE 'search_path=%'
     );
 
+  -- 4. Check platform dependencies
+  IF EXISTS (SELECT 1 FROM pg_tables WHERE schemaname = 'storage' AND tablename = 'buckets') THEN
+    SELECT EXISTS (SELECT 1 FROM storage.buckets WHERE id = 'course-materials') INTO v_storage_bucket;
+  END IF;
+
+  SELECT count(*) INTO v_storage_policies
+  FROM pg_policies
+  WHERE schemaname = 'storage' AND tablename = 'objects';
+
+  IF EXISTS (SELECT 1 FROM pg_tables WHERE schemaname = 'cron' AND tablename = 'job') THEN
+    SELECT count(*) INTO v_cron_jobs FROM cron.job WHERE active = true;
+  END IF;
+
+  SELECT count(*) INTO v_extensions
+  FROM pg_extension
+  WHERE extname IN ('uuid-ossp', 'pgcrypto', 'pg_net', 'pg_cron', 'supabase_vault');
+
+  IF EXISTS (SELECT 1 FROM pg_tables WHERE schemaname = 'vault' AND tablename = 'decrypted_secrets') THEN
+    SELECT count(*) INTO v_vault_secrets
+    FROM vault.decrypted_secrets
+    WHERE name IN ('project_url', 'cron_secret', 'push_function_slug');
+  END IF;
+
   -- Return rows
   RETURN QUERY VALUES
     ('C01', 'Tables in public', '31', v_tables::text, CASE WHEN v_tables = 31 THEN 'PASS' ELSE 'FAIL' END),
@@ -75,7 +105,12 @@ BEGIN
     ('C09', 'RLS Enabled Tables', '31', v_rls_enabled::text, CASE WHEN v_rls_enabled = 31 THEN 'PASS' ELSE 'FAIL' END),
     ('C10', 'RLS Forced Tables', '0', v_rls_forced::text, CASE WHEN v_rls_forced = 0 THEN 'PASS' ELSE 'FAIL' END),
     ('C11', 'Unpinned SecDef Functions', '0', v_unpinned::text, CASE WHEN v_unpinned = 0 THEN 'PASS' ELSE 'FAIL' END),
-    ('C12', 'Policy MD5 Fingerprint', 'bacff6e12c60748988fc0831fe4307ec', v_fingerprint, CASE WHEN v_fingerprint = 'bacff6e12c60748988fc0831fe4307ec' THEN 'PASS' ELSE 'FAIL' END);
+    ('C12', 'Policy MD5 Fingerprint', 'bacff6e12c60748988fc0831fe4307ec', v_fingerprint, CASE WHEN v_fingerprint = 'bacff6e12c60748988fc0831fe4307ec' THEN 'PASS' ELSE 'FAIL' END),
+    ('C13', 'Storage Bucket (course-materials)', 'true', v_storage_bucket::text, CASE WHEN v_storage_bucket THEN 'PASS' ELSE 'FAIL' END),
+    ('C14', 'Storage Policies on objects', '2', v_storage_policies::text, CASE WHEN v_storage_policies = 2 THEN 'PASS' ELSE 'FAIL' END),
+    ('C15', 'Active Cron Jobs', '>= 5', v_cron_jobs::text, CASE WHEN v_cron_jobs >= 5 THEN 'PASS' ELSE 'FAIL' END),
+    ('C16', 'Platform Extensions', '5', v_extensions::text, CASE WHEN v_extensions = 5 THEN 'PASS' ELSE 'FAIL' END),
+    ('C17', 'Vault Push Scheduler Secrets', '3', v_vault_secrets::text, CASE WHEN v_vault_secrets = 3 THEN 'PASS' ELSE 'FAIL' END);
 END;
 $val$;
 

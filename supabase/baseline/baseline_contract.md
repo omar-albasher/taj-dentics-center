@@ -2,10 +2,10 @@
 
 **Extraction Date:** 2026-11-17 12:12:00 UTC+3  
 **Versions:** pg_dump 17.12 (client) / PostgreSQL 17.6 (Supabase hosted, AWS eu-west-1)  
-**Authoritative Dump File:** `supabase/baseline/schema_live_20261117.sql` (319,289 bytes, 9,856 lines)  
-**Canonical Rebuild File:** `supabase/baseline/canonical_foundation.sql`  
+**Authoritative Raw Dump:** `supabase/baseline/schema_live_20261117.sql` (319,289 bytes, 9,856 lines)  
+**Canonical Rebuild File:** `supabase/baseline/canonical_foundation.sql` (LF-only, zero BOM, client directives stripped, safe schema creation)  
 **Validation Fingerprint:** `bacff6e12c60748988fc0831fe4307ec`  
-**Status:** Certified Post-D5 Canonical Baseline (Cold-start verified)
+**Status:** Certified Post-D5 Canonical Baseline (Live-certified; Cold-start pending verification on secondary project)
 
 ---
 
@@ -18,8 +18,8 @@ This baseline captures the complete, authoritative live schema state of Taj Dent
 | Views | **26** | Certified | Including financial reports and trainee safe profile |
 | Functions | **87** | Certified | 100% of `SECURITY DEFINER` functions have pinned `search_path` |
 | RLS Policies | **59** | Certified | Public policy MD5 fingerprint: `bacff6e12c60748988fc0831fe4307ec` |
-| Triggers | **50** | Certified | Includes `trg_guard_users_admin_changes` & audit triggers |
-| Indexes | **87** | Certified | Primary, foreign, and performance indexes |
+| Triggers | **50** | Certified | 49 standard triggers + 1 constraint trigger (`trg_guard_users_admin_changes`) |
+| Indexes | **87** | Certified | 31 PK + 18 UNIQUE constraints + 35 CREATE INDEX + 3 UNIQUE INDEX |
 | Sequences | **3** | Certified | `audit_log_id_seq`, `trainee_code_seq`, `lab_invoice_number_seq` |
 | Enums | **8** | Certified | All 8 custom PostgreSQL enums defined |
 | RLS Enabled | **31** | Certified | 100% of tables have row-level security enabled |
@@ -36,51 +36,57 @@ pg_dump "$SUPABASE_DB_URL" \
   --no-owner \
   --file="supabase/baseline/schema_live_20261117.sql"
 ```
+
 * **Clean-up applied to generate `canonical_foundation.sql`:**
-  1. Commented out client-only pg_dump 17 security directives (`\restrict` and `\unrestrict`).
-  2. Changed `CREATE SCHEMA public;` to `CREATE SCHEMA IF NOT EXISTS public;` to avoid collisions on pre-existing databases.
+  1. **Zero BOM & LF Line Endings:** Encoded strictly as UTF-8 without byte-order marks (`2D 2D`) and Unix line feeds (`\n`).
+  2. **Directives Stripped:** Entirely removed PostgreSQL 17 client slash commands (`\restrict` and `\unrestrict`).
+  3. **Idempotent Schema:** Replaced `CREATE SCHEMA public;` with `CREATE SCHEMA IF NOT EXISTS public;`.
+  4. **Permission Guard:** Wrapped `ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin` in a dynamic block catching `insufficient_privilege` to prevent cold-start failures where `postgres` lacks administrative membership.
 
 ---
 
-## 3. Platform & Out-of-Dump Components
-Components outside the `public` schema are maintained in dedicated, modular files under `supabase/platform/`:
-1. **Storage (`supabase/platform/storage.sql`):**
+## 3. Platform Prerequisites & External Dependencies
+Components outside the `public` schema are maintained in modular files under `supabase/platform/`:
+1. **Extensions (`supabase/platform/extensions.sql`):**
+   - `uuid-ossp` (schema `extensions`)
+   - `pgcrypto` (schema `extensions`)
+   - `pg_stat_statements` (schema `extensions`)
+   - `pg_net` (schema `public`)
+   - `pg_cron` (schema `pg_catalog`)
+   - `supabase_vault` (schema `vault`)
+2. **Vault Secrets (`supabase/platform/vault_secrets.sql`):**
+   - Required by push worker `dispatch_push_batch`:
+     - `project_url`
+     - `cron_secret`
+     - `push_function_slug`
+3. **Storage (`supabase/platform/storage.sql`):**
    - Bucket: `course-materials` (private).
    - Policies on `storage.objects`:
      - `admin_course_materials_storage` (ALL for active admins).
      - `course_materials_storage_download` (SELECT for staff and enrolled, non-withdrawn trainees).
-2. **Cron Scheduler (`supabase/platform/cron_jobs.sql`):**
+4. **Cron Scheduler (`supabase/platform/cron_jobs.sql`):**
    - Registered pg_cron jobs:
      - `auto_open_close_sessions` (`*/2 * * * *`)
      - `enqueue_session_reminders` (`*/5 * * * *`)
      - `dispatch_push_batch` (`* * * * *`)
      - `expire_waitlist_notifications` (`*/15 * * * *`)
      - `enqueue_payment_reminders` (`0 7 * * 0`)
-3. **Auth Hooks (`supabase/platform/auth_hooks.md`):**
-   - Custom Access Token Hook points to `public.custom_access_token_hook(jsonb)` via Supabase Dashboard / Config.
+5. **Auth Hooks (`supabase/platform/auth_hooks.md`):**
+   - Custom Access Token Hook points to `public.custom_access_token_hook(jsonb)`.
 
 ---
 
-## 4. Key Entities & Security Hardening Anchors
-* **Enums (8):**
-  - `public.attendance_method` (`qr`, `manual`)
-  - `public.currency_type` (`SYP`, `USD`)
-  - `public.enrollment_status` (`pending`, `confirmed`, `rejected`, `cancelled`)
-  - `public.payment_method` (`cash`, `transfer`, `other`, `sham_cash`, `hawala`)
-  - `public.payment_status` (`unpaid`, `partial`, `complete`)
-  - `public.session_status` (`scheduled`, `open`, `closed`, `cancelled`, `missed`)
-  - `public.survey_type` (`mid_term`, `final`, `general`)
-  - `public.user_role` (`admin`, `trainer`, `reception`, `trainee`)
+## 4. Key Security Invariants & Defenses
+* **Enums (8):** `attendance_method`, `currency_type`, `enrollment_status`, `payment_method`, `payment_status`, `session_status` (including `'missed'`), `survey_type`, `user_role`.
 * **Functions:**
-  - `public.get_user_role()`: Reads directly from `public.users` where `id = auth.uid() AND is_active = true` (`SECURITY DEFINER`, search_path pinned to `public, pg_temp`), eliminating stale JWT role claims.
-  - `public.c1_can_read_financials(uuid)`: Authoritative financial read access control.
+  - `public.get_user_role()`: Live DB read with `is_active = true` (`SECURITY DEFINER`, search_path pinned to `public, pg_temp`), completely independent of JWT claims.
   - `public.verify_pin(text)`, `public.set_user_pin(text)`, `public.remove_user_pin()`: Isolated PIN management.
-  - `public.create_session(...)`, `public.open_session(uuid)`, `public.close_session(uuid)`: Staff-only atomic session RPCs.
-  - `public.shift_cohort_sessions(uuid, date)`: Damascus timezone-safe session rescheduling.
+  - `public.create_session(...)`, `public.open_session(uuid)`, `public.close_session(uuid)`: Atomic staff-only RPCs.
+  - `public.shift_cohort_sessions(uuid, date)`: Damascus timezone-safe rescheduling preserving wall clock.
 * **Hardened Security Triggers:**
-  - `trg_guard_users_admin_changes` on `public.users`: Blocks self-demotion, self-deactivation, and demotion of the last active admin even under service_role.
-  - `reception_insert` on `public.payments`: Enforces `performed_by = auth.uid()` and verified methods.
-  - Exactly 12 active audit triggers across 12 tracked tables.
+  - `trg_guard_users_admin_changes` on `public.users`: Protects against self-demotion, self-deactivation, and demotion of the last active admin even under service_role.
+  - `reception_insert` on `public.payments`: Enforces `performed_by = auth.uid()`.
+  - 12 active audit triggers across 12 tracked tables.
 
 ---
 
@@ -89,4 +95,4 @@ To verify any target environment (live or clean rebuild):
 ```sql
 \i supabase/baseline/validate_rebuild.sql
 ```
-Must yield 12/12 `PASS` with fingerprint `bacff6e12c60748988fc0831fe4307ec`.
+Validates 17 assertions covering public schema, storage, cron, extensions, and vault secrets.
