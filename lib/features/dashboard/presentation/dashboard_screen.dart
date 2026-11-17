@@ -164,7 +164,7 @@ class DashboardScreen extends ConsumerWidget {
                   physics: const NeverScrollableScrollPhysics(),
                   crossAxisSpacing: Responsive.spacing(context, 16),
                   mainAxisSpacing: Responsive.spacing(context, 16),
-                  childAspectRatio: isDesktop ? (isAdmin ? 1.5 : 3.0) : 1.2,
+                  childAspectRatio: isDesktop ? (isAdmin ? 1.15 : 2.5) : 1.2,
                   children: kpis.map((k) => _KpiCard(data: k)).toList(),
                 );
               },
@@ -352,7 +352,7 @@ class _KpiCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: EdgeInsets.all(Responsive.spacing(context, 16)),
+      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: AppColors.cardBg,
         borderRadius: BorderRadius.circular(16),
@@ -362,7 +362,7 @@ class _KpiCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Container(
-            padding: EdgeInsets.all(Responsive.spacing(context, 8)),
+            padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
               color: data.color.withValues(alpha: 0.15),
               borderRadius: BorderRadius.circular(10),
@@ -370,7 +370,7 @@ class _KpiCard extends StatelessWidget {
             child: Icon(
               data.icon,
               color: data.color,
-              size: Responsive.iconSize(context, 18),
+              size: 20,
             ),
           ),
           const Spacer(),
@@ -387,6 +387,7 @@ class _KpiCard extends StatelessWidget {
               ),
             ),
           ),
+          const SizedBox(height: 2),
           Text(
             data.title,
             style: TextStyle(
@@ -398,6 +399,7 @@ class _KpiCard extends StatelessWidget {
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),
+          const SizedBox(height: 2),
           Text(
             data.subtitle,
             style: TextStyle(

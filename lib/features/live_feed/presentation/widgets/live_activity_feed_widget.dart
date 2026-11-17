@@ -25,18 +25,22 @@ class LiveActivityFeedWidget extends ConsumerWidget {
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
             child: Row(
               children: [
-                const Icon(Icons.bolt, color: AppColors.gold, size: 22),
+                const Icon(Icons.bolt, color: AppColors.gold, size: 20),
                 const SizedBox(width: 8),
-                const Text(
-                  'شريط النشاط اللحظي (Live Feed)',
-                  style: TextStyle(
-                    fontFamily: 'Cairo',
-                    fontSize: 16,
-                    fontWeight: FontWeight.w900,
-                    color: AppColors.gold,
+                const Expanded(
+                  child: Text(
+                    'شريط النشاط اللحظي (Live Feed)',
+                    style: TextStyle(
+                      fontFamily: 'Cairo',
+                      fontSize: 15,
+                      fontWeight: FontWeight.w900,
+                      color: AppColors.gold,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
-                const Spacer(),
+                const SizedBox(width: 8),
 
                 // Live status pulsing badge
                 Container(
