@@ -11,13 +11,37 @@ class UsersRepository {
   }
 
   Future<void> toggleUserStatus(String userId, bool isActive) async {
-    await _client
-        .from('users')
-        .update({'is_active': isActive}).eq('id', userId);
+    await _invokeManageUser({
+      'action': 'set_active',
+      'user_id': userId,
+      'is_active': isActive,
+    });
   }
 
   Future<void> updateUserRole(String userId, String role) async {
-    await _client.from('users').update({'role': role}).eq('id', userId);
+    await _invokeManageUser({
+      'action': 'set_role',
+      'user_id': userId,
+      'role': role,
+    });
+  }
+
+  // Role/activation changes must go through the Edge Function: it also bans or
+  // unbans the auth account, which a direct table update cannot do.
+  Future<void> _invokeManageUser(Map<String, dynamic> body) async {
+    try {
+      final response = await _client.functions.invoke('manage-user', body: body);
+      final data = response.data;
+      if (data is Map && data['error'] != null) {
+        throw Exception(data['error']);
+      }
+    } on FunctionException catch (e) {
+      final details = e.details;
+      if (details is Map && details['error'] != null) {
+        throw Exception(details['error']);
+      }
+      rethrow;
+    }
   }
 
   Future<void> addUser({
