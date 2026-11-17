@@ -32,27 +32,42 @@ class _PinLockOverlayState extends ConsumerState<PinLockOverlay> {
   }
 
   void _onDigitPressed(String digit) {
+    final pinState = ref.read(pinLockProvider);
+    if (pinState.isCoolingDown || pinState.isVerifying) return;
+
     if (_enteredPin.length < 6) {
-      setState(() => _enteredPin += digit);
-      if (_enteredPin.length >= 4) {
-        _attemptUnlock();
+      final updatedPin = _enteredPin + digit;
+      setState(() => _enteredPin = updatedPin);
+      if (updatedPin.length == 6) {
+        _attemptUnlock(updatedPin);
       }
     }
   }
 
   void _onBackspace() {
+    final pinState = ref.read(pinLockProvider);
+    if (pinState.isCoolingDown || pinState.isVerifying) return;
+
     if (_enteredPin.isNotEmpty) {
       setState(() => _enteredPin = _enteredPin.substring(0, _enteredPin.length - 1));
     }
   }
 
   void _onClear() {
+    final pinState = ref.read(pinLockProvider);
+    if (pinState.isCoolingDown || pinState.isVerifying) return;
+
     setState(() => _enteredPin = '');
   }
 
-  Future<void> _attemptUnlock() async {
+  Future<void> _attemptUnlock([String? pinToVerify]) async {
+    final pin = pinToVerify ?? _enteredPin;
+    final pinState = ref.read(pinLockProvider);
+    if (pinState.isVerifying || pinState.isCoolingDown) return;
+    if (pin.length < 4) return;
+
     final success =
-        await ref.read(pinLockProvider.notifier).unlockWithPin(_enteredPin);
+        await ref.read(pinLockProvider.notifier).unlockWithPin(pin);
     if (!success && mounted) {
       setState(() => _enteredPin = '');
     }
@@ -67,13 +82,29 @@ class _PinLockOverlayState extends ConsumerState<PinLockOverlay> {
       autofocus: true,
       onKeyEvent: (event) {
         if (event is KeyDownEvent) {
+          final pinState = ref.read(pinLockProvider);
+          if (pinState.isCoolingDown || pinState.isVerifying) return;
+
           final label = event.logicalKey.keyLabel;
+          String? digit;
           if (RegExp(r'^[0-9]$').hasMatch(label)) {
-            _onDigitPressed(label);
+            digit = label;
+          } else if (event.character != null &&
+              RegExp(r'^[0-9]$').hasMatch(event.character!)) {
+            digit = event.character;
+          }
+
+          if (digit != null) {
+            _onDigitPressed(digit);
           } else if (event.logicalKey == LogicalKeyboardKey.backspace) {
             _onBackspace();
           } else if (event.logicalKey == LogicalKeyboardKey.escape) {
             _onClear();
+          } else if (event.logicalKey == LogicalKeyboardKey.enter ||
+              event.logicalKey == LogicalKeyboardKey.numpadEnter) {
+            if (_enteredPin.length >= 4) {
+              _attemptUnlock();
+            }
           }
         }
       },
@@ -163,7 +194,7 @@ class _PinLockOverlayState extends ConsumerState<PinLockOverlay> {
                       )
                     else
                       Text(
-                        'أدخل رمز الـ PIN من 4 أو 6 أرقام (يمكنك الكتابة بالكيبورد مباشرة)',
+                        'أدخل رمز الـ PIN المكون من 6 أرقام (أو اضغط تأكيد / Enter)',
                         textAlign: TextAlign.center,
                         style: TextStyle(
                           color: AppColors.textSecondary,
@@ -176,6 +207,53 @@ class _PinLockOverlayState extends ConsumerState<PinLockOverlay> {
 
                     // Numeric Keypad
                     _buildKeypad(),
+
+                    SizedBox(height: Responsive.spacing(context, 16)),
+
+                    // Submit / Unlock button
+                    SizedBox(
+                      width: 250,
+                      height: 48,
+                      child: ElevatedButton.icon(
+                        onPressed: (_enteredPin.length >= 4 &&
+                                !pinState.isVerifying &&
+                                !pinState.isCoolingDown)
+                            ? () => _attemptUnlock()
+                            : null,
+                        icon: pinState.isVerifying
+                            ? const SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Colors.black,
+                                ),
+                              )
+                            : const Icon(Icons.lock_open, size: 20),
+                        label: Text(
+                          pinState.isVerifying
+                              ? 'جاري التحقق...'
+                              : 'تأكيد وفتح القفل',
+                          style: const TextStyle(
+                            fontFamily: 'Cairo',
+                            fontWeight: FontWeight.bold,
+                            fontSize: 15,
+                          ),
+                        ),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.gold,
+                          foregroundColor: Colors.black,
+                          disabledBackgroundColor:
+                              AppColors.surface.withValues(alpha: 0.6),
+                          disabledForegroundColor:
+                              AppColors.textSecondary.withValues(alpha: 0.4),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                          elevation: _enteredPin.length >= 4 ? 2 : 0,
+                        ),
+                      ),
+                    ),
 
                     SizedBox(height: Responsive.spacing(context, 20)),
 
@@ -256,27 +334,36 @@ class _PinLockOverlayState extends ConsumerState<PinLockOverlay> {
   }
 
   Widget _keypadBtn(String digit) {
+    final pinState = ref.watch(pinLockProvider);
+    final disabled = pinState.isCoolingDown || pinState.isVerifying;
+
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 10),
       child: Material(
-        color: AppColors.cardBg,
+        color: disabled ? AppColors.surface : AppColors.cardBg,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(16),
-          side: const BorderSide(color: AppColors.divider),
+          side: BorderSide(
+            color: disabled
+                ? AppColors.divider.withValues(alpha: 0.4)
+                : AppColors.divider,
+          ),
         ),
         child: InkWell(
           borderRadius: BorderRadius.circular(16),
-          onTap: () => _onDigitPressed(digit),
+          onTap: disabled ? null : () => _onDigitPressed(digit),
           child: Container(
             width: 68,
             height: 60,
             alignment: Alignment.center,
             child: Text(
               digit,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 22,
                 fontWeight: FontWeight.bold,
-                color: AppColors.textPrimary,
+                color: disabled
+                    ? AppColors.textSecondary.withValues(alpha: 0.4)
+                    : AppColors.textPrimary,
                 fontFamily: 'Cairo',
               ),
             ),
@@ -291,6 +378,9 @@ class _PinLockOverlayState extends ConsumerState<PinLockOverlay> {
     required String tooltip,
     required VoidCallback onPressed,
   }) {
+    final pinState = ref.watch(pinLockProvider);
+    final disabled = pinState.isCoolingDown || pinState.isVerifying;
+
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 10),
       child: Material(
@@ -301,12 +391,18 @@ class _PinLockOverlayState extends ConsumerState<PinLockOverlay> {
         ),
         child: InkWell(
           borderRadius: BorderRadius.circular(16),
-          onTap: onPressed,
+          onTap: disabled ? null : onPressed,
           child: Container(
             width: 68,
             height: 60,
             alignment: Alignment.center,
-            child: Icon(icon, color: AppColors.gold, size: 22),
+            child: Icon(
+              icon,
+              color: disabled
+                  ? AppColors.textSecondary.withValues(alpha: 0.4)
+                  : AppColors.gold,
+              size: 22,
+            ),
           ),
         ),
       ),

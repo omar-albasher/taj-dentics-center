@@ -52,6 +52,7 @@ class PinLockState {
 
 class PinLockNotifier extends Notifier<PinLockState> {
   Timer? _inactivityTimer;
+  Timer? _cooldownTimer;
   static const _inactivityDuration = Duration(minutes: 2);
 
   PinRepository get _repo => ref.read(pinRepositoryProvider);
@@ -60,6 +61,7 @@ class PinLockNotifier extends Notifier<PinLockState> {
   PinLockState build() {
     ref.onDispose(() {
       _inactivityTimer?.cancel();
+      _cooldownTimer?.cancel();
     });
 
     // فحص ما إذا كان المستخدم يمتلك رمز PIN حالياً
@@ -98,6 +100,25 @@ class PinLockNotifier extends Notifier<PinLockState> {
     state = state.copyWith(isLocked: true, clearError: true);
   }
 
+  void _startCooldownTimer() {
+    _cooldownTimer?.cancel();
+    _cooldownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (state.isCoolingDown) {
+        state = state.copyWith(
+          errorMessage:
+              'تم تجميد المحاولات مؤقتاً بسبب تكرار الخطأ. انتظر ${state.remainingCooldownSeconds} ثانية',
+        );
+      } else {
+        timer.cancel();
+        state = state.copyWith(
+          clearLockedUntil: true,
+          clearError: true,
+          failedAttempts: 0,
+        );
+      }
+    });
+  }
+
   /// محاولة فك القفل برمز PIN
   Future<bool> unlockWithPin(String pin) async {
     if (state.isCoolingDown) {
@@ -113,6 +134,7 @@ class PinLockNotifier extends Notifier<PinLockState> {
     try {
       final isValid = await _repo.verifyPin(pin);
       if (isValid) {
+        _cooldownTimer?.cancel();
         state = state.copyWith(
           isLocked: false,
           isVerifying: false,
@@ -130,6 +152,14 @@ class PinLockNotifier extends Notifier<PinLockState> {
         if (newAttempts >= 5) {
           coolDown = DateTime.now().add(const Duration(seconds: 60));
           err = 'تم استنفاد 5 محاولات خاطئة. تم قفل المحاولات لمدة 60 ثانية';
+          state = state.copyWith(
+            isVerifying: false,
+            failedAttempts: newAttempts,
+            lockedUntil: coolDown,
+            errorMessage: err,
+          );
+          _startCooldownTimer();
+          return false;
         }
 
         state = state.copyWith(
