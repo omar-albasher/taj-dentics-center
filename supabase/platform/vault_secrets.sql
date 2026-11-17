@@ -39,11 +39,9 @@ BEGIN
     PERFORM vault.update_secret(v_id, v_cron_secret);
   END IF;
 
-  -- 3. push_function_slug
+  -- 3. push_function_slug (only create if missing; preserves customized or existing live slug)
   SELECT id INTO v_id FROM vault.secrets WHERE name = 'push_function_slug';
   IF v_id IS NULL THEN
     PERFORM vault.create_secret(v_slug, 'push_function_slug', 'Edge function slug for push worker');
-  ELSE
-    PERFORM vault.update_secret(v_id, v_slug);
   END IF;
 END $$;
