@@ -41,7 +41,7 @@ pg_dump "$SUPABASE_DB_URL" \
   1. **Zero BOM & LF Line Endings:** Encoded strictly as UTF-8 without byte-order marks (`2D 2D`) and Unix line feeds (`\n`).
   2. **Directives Stripped:** Entirely removed PostgreSQL 17 client slash commands (`\restrict` and `\unrestrict`).
   3. **Idempotent Schema:** Replaced `CREATE SCHEMA public;` with `CREATE SCHEMA IF NOT EXISTS public;`.
-  4. **Permission Guard:** Wrapped `ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin` in a dynamic block catching `insufficient_privilege` to prevent cold-start failures where `postgres` lacks administrative membership.
+  4. **Permission Guard:** Wrapped `ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin` in a PL/pgSQL `DO $$` block catching `insufficient_privilege` to prevent cold-start failures where `postgres` lacks administrative membership in `supabase_admin`.
 
 ---
 
@@ -59,13 +59,14 @@ Components outside the `public` schema are maintained in modular files under `su
      - `project_url`
      - `cron_secret`
      - `push_function_slug`
+   - *Note (Task #54):* In the live database, these secrets are currently missing, which causes `dispatch_push_batch` to fail on each cron tick until provisioned.
 3. **Storage (`supabase/platform/storage.sql`):**
    - Bucket: `course-materials` (private).
    - Policies on `storage.objects`:
      - `admin_course_materials_storage` (ALL for active admins).
      - `course_materials_storage_download` (SELECT for staff and enrolled, non-withdrawn trainees).
 4. **Cron Scheduler (`supabase/platform/cron_jobs.sql`):**
-   - Registered pg_cron jobs:
+   - 5 core registered pg_cron jobs:
      - `auto_open_close_sessions` (`*/2 * * * *`)
      - `enqueue_session_reminders` (`*/5 * * * *`)
      - `dispatch_push_batch` (`* * * * *`)
@@ -90,9 +91,18 @@ Components outside the `public` schema are maintained in modular files under `su
 
 ---
 
-## 5. Verification Protocol
-To verify any target environment (live or clean rebuild):
-```sql
-\i supabase/baseline/validate_rebuild.sql
-```
-Validates 17 assertions covering public schema, storage, cron, extensions, and vault secrets.
+## 5. Cold-Start Rebuild Sequence & Verification Protocol
+### Sequential Execution Order:
+1. `supabase/platform/extensions.sql`
+2. `supabase/baseline/canonical_foundation.sql`
+3. `supabase/platform/storage.sql`
+4. `supabase/platform/cron_jobs.sql`
+5. `supabase/platform/vault_secrets.sql` (Provision actual environment secrets)
+6. Configure Auth Hook in Dashboard (`supabase/platform/auth_hooks.md`)
+7. Run Verification Script:
+   ```sql
+   \i supabase/baseline/validate_rebuild.sql
+   ```
+* **Expected Outcome:**
+  - Automatically achieves **16/17 PASS** prior to vault secret population.
+  - Achieves **17/17 PASS** once the 3 push scheduler vault secrets are provisioned.

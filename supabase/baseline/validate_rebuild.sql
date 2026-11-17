@@ -79,12 +79,21 @@ BEGIN
   WHERE schemaname = 'storage' AND tablename = 'objects';
 
   IF EXISTS (SELECT 1 FROM pg_tables WHERE schemaname = 'cron' AND tablename = 'job') THEN
-    SELECT count(*) INTO v_cron_jobs FROM cron.job WHERE active = true;
+    SELECT count(DISTINCT command) INTO v_cron_jobs
+    FROM cron.job
+    WHERE active = true
+      AND command IN (
+        'SELECT public.auto_open_close_sessions(false);',
+        'SELECT public.enqueue_session_reminders();',
+        'SELECT public.dispatch_push_batch();',
+        'SELECT public.expire_waitlist_notifications();',
+        'SELECT public.enqueue_payment_reminders();'
+      );
   END IF;
 
   SELECT count(*) INTO v_extensions
   FROM pg_extension
-  WHERE extname IN ('uuid-ossp', 'pgcrypto', 'pg_net', 'pg_cron', 'supabase_vault');
+  WHERE extname IN ('uuid-ossp', 'pgcrypto', 'pg_stat_statements', 'pg_net', 'pg_cron', 'supabase_vault');
 
   IF EXISTS (SELECT 1 FROM pg_tables WHERE schemaname = 'vault' AND tablename = 'decrypted_secrets') THEN
     SELECT count(*) INTO v_vault_secrets
@@ -106,10 +115,10 @@ BEGIN
     ('C10', 'RLS Forced Tables', '0', v_rls_forced::text, CASE WHEN v_rls_forced = 0 THEN 'PASS' ELSE 'FAIL' END),
     ('C11', 'Unpinned SecDef Functions', '0', v_unpinned::text, CASE WHEN v_unpinned = 0 THEN 'PASS' ELSE 'FAIL' END),
     ('C12', 'Policy MD5 Fingerprint', 'bacff6e12c60748988fc0831fe4307ec', v_fingerprint, CASE WHEN v_fingerprint = 'bacff6e12c60748988fc0831fe4307ec' THEN 'PASS' ELSE 'FAIL' END),
-    ('C13', 'Storage Bucket (course-materials)', 'true', v_storage_bucket::text, CASE WHEN v_storage_bucket THEN 'PASS' ELSE 'FAIL' END),
+    ('C13', 'Storage Bucket (course-materials)', 'true', COALESCE(v_storage_bucket, false)::text, CASE WHEN COALESCE(v_storage_bucket, false) THEN 'PASS' ELSE 'FAIL' END),
     ('C14', 'Storage Policies on objects', '2', v_storage_policies::text, CASE WHEN v_storage_policies = 2 THEN 'PASS' ELSE 'FAIL' END),
-    ('C15', 'Active Cron Jobs', '>= 5', v_cron_jobs::text, CASE WHEN v_cron_jobs >= 5 THEN 'PASS' ELSE 'FAIL' END),
-    ('C16', 'Platform Extensions', '5', v_extensions::text, CASE WHEN v_extensions = 5 THEN 'PASS' ELSE 'FAIL' END),
+    ('C15', 'Distinct Core Cron Jobs', '5', v_cron_jobs::text, CASE WHEN v_cron_jobs = 5 THEN 'PASS' ELSE 'FAIL' END),
+    ('C16', 'Platform Extensions', '6', v_extensions::text, CASE WHEN v_extensions = 6 THEN 'PASS' ELSE 'FAIL' END),
     ('C17', 'Vault Push Scheduler Secrets', '3', v_vault_secrets::text, CASE WHEN v_vault_secrets = 3 THEN 'PASS' ELSE 'FAIL' END);
 END;
 $val$;
