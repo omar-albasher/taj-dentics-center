@@ -8,8 +8,12 @@
 
 BEGIN;
 
-DO $$
+CREATE FUNCTION pg_temp.run_d5_sessions_proof()
+RETURNS TABLE (line_no integer, message text)
+LANGUAGE plpgsql
+AS $proof$
 DECLARE
+  v_msgs text[] := '{}';
   v_suffix text := substr(gen_random_uuid()::text, 1, 6);
   v_admin uuid;
   v_reception uuid;
@@ -39,6 +43,7 @@ DECLARE
   v_denied boolean;
 BEGIN
   RAISE NOTICE '=== Starting D5 Sessions Hardening Acceptance Tests ===';
+  v_msgs := array_append(v_msgs, '=== Starting D5 Sessions Hardening Acceptance Tests ===');
 
   -- --------------------------------------------------------------------------
   -- Test 1: Static contract (enum, functions, search_path, grants)
@@ -111,6 +116,7 @@ BEGIN
     'REGRESSION: authenticated lost EXECUTE on sessions RPCs';
 
   RAISE NOTICE 'Test 1 Passed: missed label usable; 4 RPCs SECURITY DEFINER with pg_temp; anon denied, authenticated allowed.';
+  v_msgs := array_append(v_msgs, 'Test 1 Passed: missed label usable; 4 RPCs SECURITY DEFINER with pg_temp; anon denied, authenticated allowed.');
 
   -- --------------------------------------------------------------------------
   -- Setup fixtures
@@ -203,6 +209,7 @@ BEGIN
   ASSERT v_rejected, 'create_session accepted a nonexistent cohort';
 
   RAISE NOTICE 'Test 2 Passed: reception created regular/extra sessions atomically; invalid input and unknown cohort rejected.';
+  v_msgs := array_append(v_msgs, 'Test 2 Passed: reception created regular/extra sessions atomically; invalid input and unknown cohort rejected.');
 
   -- --------------------------------------------------------------------------
   -- Test 3: close_session is atomic and status-guarded
@@ -239,6 +246,7 @@ BEGIN
   ASSERT v_rejected, 'close_session accepted an already-closed session';
 
   RAISE NOTICE 'Test 3 Passed: close_session refuses non-open sessions and preserves qr_token.';
+  v_msgs := array_append(v_msgs, 'Test 3 Passed: close_session refuses non-open sessions and preserves qr_token.');
 
   -- --------------------------------------------------------------------------
   -- Test 4: shift_cohort_sessions math (Damascus local dates, wall clock)
@@ -273,6 +281,7 @@ BEGIN
   ASSERT v_starts_at = date '2027-06-08', 'cohorts.starts_at was not updated';
 
   RAISE NOTICE 'Test 4 Passed: shift uses scheduled_at, keeps 09:00 wall clock, and updates cohorts.starts_at.';
+  v_msgs := array_append(v_msgs, 'Test 4 Passed: shift uses scheduled_at, keeps 09:00 wall clock, and updates cohorts.starts_at.');
 
   -- --------------------------------------------------------------------------
   -- Test 5: executed sessions guard and start-date freeze
@@ -300,6 +309,7 @@ BEGIN
   ASSERT v_rejected, 'shift accepted a start date not after the last executed session';
 
   RAISE NOTICE 'Test 5 Passed: executed-session guard works and starts_at stays frozen.';
+  v_msgs := array_append(v_msgs, 'Test 5 Passed: executed-session guard works and starts_at stays frozen.');
 
   -- --------------------------------------------------------------------------
   -- Test 6: trainee and anon are denied
@@ -334,9 +344,17 @@ BEGIN
 
   RESET ROLE;
   RAISE NOTICE 'Test 6 Passed: trainees are rejected by the role guard and anon is denied at the grant level.';
+  v_msgs := array_append(v_msgs, 'Test 6 Passed: trainees are rejected by the role guard and anon is denied at the grant level.');
 
   RAISE NOTICE '=== ALL D5 SESSIONS HARDENING ACCEPTANCE TESTS PASSED SUCCESSFULLY ===';
+  v_msgs := array_append(v_msgs, '=== ALL D5 SESSIONS HARDENING ACCEPTANCE TESTS PASSED SUCCESSFULLY ===');
+
+  RETURN QUERY
+  SELECT i::integer, v_msgs[i]
+  FROM generate_subscripts(v_msgs, 1) AS i;
 END;
-$$;
+$proof$;
+
+SELECT * FROM pg_temp.run_d5_sessions_proof();
 
 ROLLBACK;

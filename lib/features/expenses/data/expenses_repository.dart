@@ -29,6 +29,27 @@ class ExpensesRepository {
       'performed_by': _client.auth.currentUser!.id,
     });
   }
+
+  Future<void> updateExpense({
+    required String id,
+    required String category,
+    required double amount,
+    required String currency,
+    required DateTime expenseDate,
+    String? description,
+  }) async {
+    await _client.from('expenses').update({
+      'category': category,
+      'amount': amount,
+      'currency': currency,
+      'expense_date': expenseDate.toIso8601String().split('T')[0],
+      'description': description,
+    }).eq('id', id);
+  }
+
+  Future<void> deleteExpense(String id) async {
+    await _client.from('expenses').delete().eq('id', id);
+  }
 }
 
 final expensesRepositoryProvider = Provider((_) => ExpensesRepository());

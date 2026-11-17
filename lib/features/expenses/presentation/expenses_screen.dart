@@ -5,6 +5,7 @@ import '../../../core/utils/app_formatters.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/utils/responsive.dart';
 import '../data/expenses_repository.dart';
+import '../domain/expense_model.dart';
 
 class ExpensesScreen extends ConsumerWidget {
   const ExpensesScreen({super.key});
@@ -144,6 +145,21 @@ class ExpensesScreen extends ConsumerWidget {
                                   color: AppColors.error,
                                   fontFamily: 'Cairo'),
                             ),
+                            SizedBox(width: Responsive.spacing(context, 8)),
+                            IconButton(
+                              icon: const Icon(Icons.edit_outlined, size: 20),
+                              color: AppColors.textSecondary,
+                              tooltip: 'تعديل',
+                              onPressed: () =>
+                                  _showEditExpenseDialog(context, ref, e),
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.delete_outline, size: 20),
+                              color: AppColors.error,
+                              tooltip: 'حذف',
+                              onPressed: () =>
+                                  _confirmDeleteExpense(context, ref, e),
+                            ),
                           ],
                         ),
                       );
@@ -176,28 +192,117 @@ class ExpensesScreen extends ConsumerWidget {
   void _showAddExpenseDialog(BuildContext context, WidgetRef ref) {
     showDialog(
       context: context,
-      builder: (_) => _AddExpenseDialog(
-        onAdded: () => ref.invalidate(expensesProvider),
+      builder: (_) => _ExpenseFormDialog(
+        onSaved: () => ref.invalidate(expensesProvider),
+      ),
+    );
+  }
+
+  void _showEditExpenseDialog(
+      BuildContext context, WidgetRef ref, ExpenseModel expense) {
+    showDialog(
+      context: context,
+      builder: (_) => _ExpenseFormDialog(
+        expense: expense,
+        onSaved: () => ref.invalidate(expensesProvider),
+      ),
+    );
+  }
+
+  void _confirmDeleteExpense(
+      BuildContext context, WidgetRef ref, ExpenseModel expense) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.cardBg,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text('تأكيد الحذف',
+            style: TextStyle(
+                fontFamily: 'Cairo',
+                color: AppColors.gold,
+                fontWeight: FontWeight.bold)),
+        content: Text(
+          'هل أنت متأكد من حذف مصروف "${expense.categoryAr}" بمبلغ ${AppFormatters.amount.format(expense.amount.toInt())} ${expense.currency == 'USD' ? '\$' : 'ل.س'}؟',
+          style:
+              const TextStyle(fontFamily: 'Cairo', color: AppColors.textPrimary),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('إلغاء',
+                style: TextStyle(
+                    fontFamily: 'Cairo', color: AppColors.textSecondary)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.error),
+            onPressed: () async {
+              Navigator.pop(ctx);
+              try {
+                await ref
+                    .read(expensesRepositoryProvider)
+                    .deleteExpense(expense.id);
+                ref.invalidate(expensesProvider);
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                        content: Text('تم حذف المصروف بنجاح ✓'),
+                        backgroundColor: AppColors.success),
+                  );
+                }
+              } catch (e) {
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                        content: Text(AppErrorHandler.friendlyMessage(e)),
+                        backgroundColor: AppColors.error),
+                  );
+                }
+              }
+            },
+            child: const Text('حذف',
+                style: TextStyle(fontFamily: 'Cairo', color: Colors.white)),
+          ),
+        ],
       ),
     );
   }
 }
 
-class _AddExpenseDialog extends ConsumerStatefulWidget {
-  final VoidCallback onAdded;
-  const _AddExpenseDialog({required this.onAdded});
+class _ExpenseFormDialog extends ConsumerStatefulWidget {
+  final ExpenseModel? expense;
+  final VoidCallback onSaved;
+  const _ExpenseFormDialog({this.expense, required this.onSaved});
 
   @override
-  ConsumerState<_AddExpenseDialog> createState() => _AddExpenseDialogState();
+  ConsumerState<_ExpenseFormDialog> createState() => _ExpenseFormDialogState();
 }
 
-class _AddExpenseDialogState extends ConsumerState<_AddExpenseDialog> {
-  final _amountCtrl = TextEditingController();
-  final _descriptionCtrl = TextEditingController();
-  String _category = 'rent';
-  String _currency = 'SYP';
-  DateTime _date = DateTime.now();
+class _ExpenseFormDialogState extends ConsumerState<_ExpenseFormDialog> {
+  late final TextEditingController _amountCtrl;
+  late final TextEditingController _descriptionCtrl;
+  late String _category;
+  late String _currency;
+  late DateTime _date;
   bool _loading = false;
+
+  bool get _isEditing => widget.expense != null;
+
+  @override
+  void initState() {
+    super.initState();
+    final exp = widget.expense;
+    _amountCtrl = TextEditingController(
+      text: exp != null
+          ? (exp.amount % 1 == 0
+              ? exp.amount.toInt().toString()
+              : exp.amount.toString())
+          : '',
+    );
+    _descriptionCtrl = TextEditingController(text: exp?.description ?? '');
+    _category = exp?.category ?? 'rent';
+    _currency = exp?.currency ?? 'SYP';
+    _date = exp?.expenseDate ?? DateTime.now();
+  }
 
   @override
   void dispose() {
@@ -217,31 +322,58 @@ class _AddExpenseDialogState extends ConsumerState<_AddExpenseDialog> {
       return;
     }
 
+    final parsedAmount = double.tryParse(_amountCtrl.text);
+    if (parsedAmount == null || parsedAmount <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('يرجى إدخال مبلغ صحيح أكبر من الصفر'),
+          backgroundColor: AppColors.error,
+        ),
+      );
+      return;
+    }
+
     setState(() => _loading = true);
     try {
-      await ref.read(expensesRepositoryProvider).addExpense(
-            category: _category,
-            amount: double.parse(_amountCtrl.text),
-            currency: _currency,
-            expenseDate: _date,
-            description:
-                _descriptionCtrl.text.isEmpty ? null : _descriptionCtrl.text,
-          );
+      if (_isEditing) {
+        await ref.read(expensesRepositoryProvider).updateExpense(
+              id: widget.expense!.id,
+              category: _category,
+              amount: parsedAmount,
+              currency: _currency,
+              expenseDate: _date,
+              description:
+                  _descriptionCtrl.text.isEmpty ? null : _descriptionCtrl.text,
+            );
+      } else {
+        await ref.read(expensesRepositoryProvider).addExpense(
+              category: _category,
+              amount: parsedAmount,
+              currency: _currency,
+              expenseDate: _date,
+              description:
+                  _descriptionCtrl.text.isEmpty ? null : _descriptionCtrl.text,
+            );
+      }
 
       if (!mounted) return;
       Navigator.pop(context);
-      widget.onAdded();
+      widget.onSaved();
 
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('تم تسجيل المصروف بنجاح ✓'),
+        SnackBar(
+          content: Text(_isEditing
+              ? 'تم تعديل المصروف بنجاح ✓'
+              : 'تم تسجيل المصروف بنجاح ✓'),
           backgroundColor: AppColors.success,
         ),
       );
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(AppErrorHandler.friendlyMessage(e)), backgroundColor: AppColors.error),
+        SnackBar(
+            content: Text(AppErrorHandler.friendlyMessage(e)),
+            backgroundColor: AppColors.error),
       );
     } finally {
       if (mounted) setState(() => _loading = false);
@@ -263,9 +395,10 @@ class _AddExpenseDialogState extends ConsumerState<_AddExpenseDialog> {
             children: [
               Row(
                 children: [
-                  const Icon(Icons.money_off, color: AppColors.gold),
+                  Icon(_isEditing ? Icons.edit_note : Icons.money_off,
+                      color: AppColors.gold),
                   SizedBox(width: Responsive.spacing(context, 8)),
-                  Text('إضافة مصروف جديد',
+                  Text(_isEditing ? 'تعديل المصروف' : 'إضافة مصروف جديد',
                       style: TextStyle(
                           fontSize: Responsive.fontSize(context, 18),
                           fontWeight: FontWeight.w700,
@@ -434,8 +567,8 @@ class _AddExpenseDialogState extends ConsumerState<_AddExpenseDialog> {
                               width: 20,
                               child: CircularProgressIndicator(
                                   color: Colors.black, strokeWidth: 2))
-                          : const Text('إضافة',
-                              style: TextStyle(fontFamily: 'Cairo')),
+                          : Text(_isEditing ? 'حفظ التعديل' : 'إضافة',
+                              style: const TextStyle(fontFamily: 'Cairo')),
                     ),
                   ),
                 ],
