@@ -1,28 +1,28 @@
-# Taj Dentics Database Live Baseline Contract (#47)
+# Taj Dentics Database Live Baseline Contract (#47 — Post-C2)
 
 **Extraction Date:** 2026-11-17 12:12:00 UTC+3  
 **Versions:** pg_dump 17.12 (client) / PostgreSQL 17.6 (Supabase hosted, AWS eu-west-1)  
 **Authoritative Raw Dump:** `supabase/baseline/schema_live_20261117.sql` (319,289 bytes, 9,856 lines)  
 **Canonical Rebuild File:** `supabase/baseline/canonical_foundation.sql` (LF-only, zero BOM, client directives stripped, safe schema creation)  
-**Validation Fingerprint:** `bacff6e12c60748988fc0831fe4307ec`  
-**Status:** Certified Post-D5 Canonical Baseline (Cold-start Verified 16/17 on secondary project; Fingerprint Match 100%)
+**Validation Fingerprint:** `9f2ee2ee3f981ee2aa73d0fad04d7657`  
+**Status:** Certified Post-C2 Live Baseline (Verified 17/17 PASS on Live DB; Policy Fingerprint Match 100%)
 
 ---
 
 ## 1. Executive Summary & Architectural Invariants
-This baseline captures the complete, authoritative live schema state of Taj Dentics database following the Phase D5 security hardening milestones (PIN storage isolation `e83100e`, sessions hardening `4f50736`, and users hardening `8b3885e`):
+This baseline captures the complete, authoritative live schema state of Taj Dentics database following Phase D5 hardening and Phase C2 custody ledger migrations (20261118000001 through 20261118000008):
 
 | Class | Count | Status | Notes |
 | :--- | :--- | :--- | :--- |
-| Tables | **31** | Certified | 30 foundational tables + `public.user_pins` |
-| Views | **26** | Certified | Including financial reports and trainee safe profile |
-| Functions | **87** | Certified | 100% of `SECURITY DEFINER` functions have pinned `search_path` |
-| RLS Policies | **59** | Certified | Public policy MD5 fingerprint: `bacff6e12c60748988fc0831fe4307ec` |
-| Triggers | **50** | Certified | 49 standard triggers + 1 constraint trigger (`trg_guard_users_admin_changes`) |
-| Indexes | **87** | Certified | 31 PK + 18 UNIQUE constraints + 35 CREATE INDEX + 3 UNIQUE INDEX |
+| Tables | **33** | Certified | 30 foundational tables + `user_pins` + `financial_accounts` + `account_transactions` |
+| Views | **28** | Certified | 26 foundational views + `account_balances_v` + `account_ledger_v` |
+| Functions | **94** | Certified | 100% of `SECURITY DEFINER` functions have pinned `search_path` |
+| RLS Policies | **61** | Certified | 59 foundational + `admin_all` on `financial_accounts` + `admin_select` on `account_transactions` |
+| Triggers | **53** | Certified | 50 foundational + 3 C2 triggers (`trg_c2_account_tx_payment`, `expense`, `refund`) |
+| Indexes | **96** | Certified | Foundation + C2 ledger unique source and time indexes |
 | Sequences | **3** | Certified | `audit_log_id_seq`, `trainee_code_seq`, `lab_invoice_number_seq` |
-| Enums | **8** | Certified | All 8 custom PostgreSQL enums defined |
-| RLS Enabled | **31** | Certified | 100% of tables have row-level security enabled |
+| Enums | **9** | Certified | 8 foundational enums + `public.account_type` (`cash`, `bank`, `wallet`) |
+| RLS Enabled | **33** | Certified | 100% of tables have row-level security enabled |
 | RLS Forced | **0** | Certified | Zero forced tables (avoids breaking owner bypass in SecDef RPCs) |
 
 ---
@@ -81,7 +81,7 @@ Components outside the `public` schema are maintained in modular files under `su
 ---
 
 ## 4. Key Security Invariants & Defenses
-* **Enums (8):** `attendance_method`, `currency_type`, `enrollment_status`, `payment_method`, `payment_status`, `session_status` (including `'missed'`), `survey_type`, `user_role`.
+* **Enums (9):** `account_type`, `attendance_method`, `currency_type`, `enrollment_status`, `payment_method`, `payment_status`, `session_status` (including `'missed'`), `survey_type`, `user_role`.
 * **Functions:**
   - `public.get_user_role()`: Live DB read with `is_active = true` (`SECURITY DEFINER`, search_path pinned to `public, pg_temp`), completely independent of JWT claims.
   - `public.verify_pin(text)`, `public.set_user_pin(text)`, `public.remove_user_pin()`: Isolated PIN management.
@@ -98,16 +98,17 @@ Components outside the `public` schema are maintained in modular files under `su
 ### Sequential Execution Order:
 1. `supabase/platform/extensions.sql` (Enable 6 platform extensions)
 2. `supabase/baseline/canonical_foundation.sql` (Create canonical public schema)
-3. `supabase/platform/storage.sql` (Create bucket & storage policies)
-4. `supabase/platform/cron_jobs.sql` (Register 5 core cron jobs)
-5. Deploy Edge Functions (`manage-user`, `send-fcm-notification`, `create-trainee`, `smart-responder`)
-6. Configure Edge Function Secrets (`CRON_SECRET`, `FIREBASE_SERVICE_ACCOUNT`)
-7. `supabase/platform/vault_secrets.sql` (Provide real project URL, cron secret, and push slug)
-8. Configure Auth Hook in Dashboard (`supabase/platform/auth_hooks.md`)
-9. Run Verification Script:
+3. Apply Phase C2 Migrations: `supabase/migrations/20261118000001_financial_accounts.sql` through `20261118000008_account_ledger_v.sql` (Authoritative source for Phase C2 schema, triggers, RLS, and views)
+4. `supabase/platform/storage.sql` (Create bucket & storage policies)
+5. `supabase/platform/cron_jobs.sql` (Register 5 core cron jobs)
+6. Deploy Edge Functions (`manage-user`, `send-fcm-notification`, `create-trainee`, `smart-responder`)
+7. Configure Edge Function Secrets (`CRON_SECRET`, `FIREBASE_SERVICE_ACCOUNT`)
+8. `supabase/platform/vault_secrets.sql` (Provide real project URL, cron secret, and push slug)
+9. Configure Auth Hook in Dashboard (`supabase/platform/auth_hooks.md`)
+10. Run Verification Script:
    ```sql
    \i supabase/baseline/validate_rebuild.sql
    ```
 * **Expected Outcome:**
   - All 17 checks evaluated: **17/17 PASS**.
-  - Verified policy fingerprint: `bacff6e12c60748988fc0831fe4307ec`.
+  - Verified policy fingerprint: `9f2ee2ee3f981ee2aa73d0fad04d7657`.
