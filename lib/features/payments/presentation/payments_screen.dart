@@ -11,6 +11,7 @@ import '../../../core/utils/jwt_utils.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/utils/responsive.dart';
 import '../data/payments_repository.dart';
+import '../../accounts/data/accounts_repository.dart';
 import 'package:admin_dashboard/core/widgets/keep_alive_wrapper.dart';
 
 class PaymentsScreen extends ConsumerStatefulWidget {
@@ -480,6 +481,9 @@ class _RecentPaymentsTabState extends ConsumerState<_RecentPaymentsTab> {
           ref.invalidate(recentPaymentsProvider);
           ref.invalidate(allEnrollmentsProvider);
           ref.invalidate(overduePaymentsProvider);
+          // الاسترداد يقيّد حركة خروج في دفتر الخزينة.
+          ref.invalidate(accountBalancesProvider);
+          ref.invalidate(accountLedgerProvider);
         },
       ),
     );
@@ -823,6 +827,9 @@ class _EnrollmentsTabState extends ConsumerState<_EnrollmentsTab> {
     ref.invalidate(allEnrollmentsProvider);
     ref.invalidate(recentPaymentsProvider);
     ref.invalidate(overduePaymentsProvider);
+    // حذف دفعة أو تعديل رسوم يغيّر دفتر الخزينة أيضاً.
+    ref.invalidate(accountBalancesProvider);
+    ref.invalidate(accountLedgerProvider);
   }
 
   void _showInstallmentPlan(Map<String, dynamic> e) {
@@ -1128,6 +1135,7 @@ class _AddPaymentDialogState extends ConsumerState<_AddPaymentDialog> {
   String? _selectedEnrollmentId;
   String _currency = 'SYP';
   String _method = 'cash';
+  String? _selectedAccountId;
   bool _loading = false;
 
   @override
@@ -1198,7 +1206,11 @@ class _AddPaymentDialogState extends ConsumerState<_AddPaymentDialog> {
             externalReference: _externalRefCtrl.text.trim().isEmpty ? null : _externalRefCtrl.text.trim(),
             notes: _notesCtrl.text.trim().isEmpty ? null : _notesCtrl.text.trim(),
             paidAt: _paidAt,
+            accountId: _selectedAccountId,
           );
+
+      ref.invalidate(accountBalancesProvider);
+      ref.invalidate(accountLedgerProvider);
 
       if (!mounted) return;
       Navigator.pop(context);
@@ -1222,6 +1234,11 @@ class _AddPaymentDialogState extends ConsumerState<_AddPaymentDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final token = Supabase.instance.client.auth.currentSession?.accessToken;
+    final role = JwtUtils.extractRole(token);
+    final isAdmin = role == 'admin';
+    final accountsAsync = isAdmin ? ref.watch(accountBalancesProvider) : null;
+
     final enrollmentsAsync =
         ref.watch(allEnrollmentsProvider(const PaymentFilterParams()));
 
@@ -1402,7 +1419,12 @@ class _AddPaymentDialogState extends ConsumerState<_AddPaymentDialog> {
                         ),
                       ],
                       onChanged: _selectedEnrollmentId == null
-                          ? (v) => setState(() => _currency = v ?? 'SYP')
+                          ? (v) => setState(() {
+                                _currency = v ?? 'SYP';
+                                // الحساب مختار لعملة سابقة؛ إبقاؤه يسبب رفضاً
+                                // صريحاً من trigger تطابق العملة.
+                                _selectedAccountId = null;
+                              })
                           : null,
                     ),
                   ),
@@ -1507,6 +1529,62 @@ class _AddPaymentDialogState extends ConsumerState<_AddPaymentDialog> {
                         borderSide:
                             const BorderSide(color: AppColors.gold, width: 2)),
                   ),
+                ),
+              ],
+
+              // Account Selector (Admin Only, Optional - falls back to auto trigger derivation)
+              if (isAdmin && accountsAsync != null) ...[
+                SizedBox(height: Responsive.spacing(context, 12)),
+                accountsAsync.maybeWhen(
+                  data: (accounts) {
+                    final matchingAccounts = accounts
+                        .where((a) => a.currency == _currency && a.isActive)
+                        .toList();
+                    return DropdownButtonFormField<String?>(
+                      key: ValueKey('pay_acc_${_currency}_$_selectedAccountId'),
+                      initialValue: _selectedAccountId,
+                      dropdownColor: AppColors.cardBg,
+                      decoration: InputDecoration(
+                        labelText: 'إيداع بالحساب (اختياري للأدمن)',
+                        labelStyle: const TextStyle(
+                            color: AppColors.textSecondary, fontFamily: 'Cairo'),
+                        prefixIcon: const Icon(Icons.account_balance_wallet_outlined,
+                            color: AppColors.gold),
+                        filled: true,
+                        fillColor: AppColors.surface,
+                        border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: const BorderSide(color: AppColors.divider)),
+                        enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: const BorderSide(color: AppColors.divider)),
+                        focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide:
+                                const BorderSide(color: AppColors.gold, width: 2)),
+                      ),
+                      items: [
+                        const DropdownMenuItem<String?>(
+                          value: null,
+                          child: Text('تلقائي (حسب طريقة الدفع والعملة)',
+                              style: TextStyle(
+                                  color: AppColors.textSecondary,
+                                  fontFamily: 'Cairo')),
+                        ),
+                        ...matchingAccounts.map((a) => DropdownMenuItem<String?>(
+                              value: a.accountId,
+                              child: Text(
+                                '${a.nameAr} (${a.currency}) — رصيد: ${AppFormatters.amount.format(a.balance.toInt())}',
+                                style: const TextStyle(
+                                    color: AppColors.textPrimary,
+                                    fontFamily: 'Cairo'),
+                              ),
+                            )),
+                      ],
+                      onChanged: (v) => setState(() => _selectedAccountId = v),
+                    );
+                  },
+                  orElse: () => const SizedBox.shrink(),
                 ),
               ],
 

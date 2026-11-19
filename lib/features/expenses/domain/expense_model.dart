@@ -4,6 +4,7 @@ class ExpenseModel {
   final double amount;
   final String currency;
   final String? description;
+  final String? accountId;
   final DateTime expenseDate;
   final DateTime createdAt;
 
@@ -13,6 +14,7 @@ class ExpenseModel {
     required this.amount,
     required this.currency,
     this.description,
+    this.accountId,
     required this.expenseDate,
     required this.createdAt,
   });
@@ -24,6 +26,7 @@ class ExpenseModel {
       amount: (map['amount'] as num?)?.toDouble() ?? 0,
       currency: map['currency'] ?? 'SYP',
       description: map['description'],
+      accountId: map['account_id']?.toString(),
       expenseDate:
           DateTime.tryParse(map['expense_date'] ?? '') ?? DateTime.now(),
       createdAt: DateTime.tryParse(map['created_at'] ?? '') ?? DateTime.now(),

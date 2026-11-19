@@ -104,6 +104,10 @@ class _SideNav extends ConsumerWidget {
         label: 'المصاريف',
         path: AppRouter.expenses),
     _NavItem(
+        icon: Icons.account_balance_wallet_outlined,
+        label: 'الخزينة والحسابات',
+        path: AppRouter.accounts),
+    _NavItem(
         icon: Icons.biotech_outlined,
         label: 'المخبر',
         path: AppRouter.dentalLab),
@@ -202,6 +206,7 @@ class _SideNav extends ConsumerWidget {
                 if (item.path == AppRouter.users && !isAdmin) return false;
                 if (item.path == AppRouter.reports && !isAdmin) return false;
                 if (item.path == AppRouter.expenses && !isAdmin) return false;
+                if (item.path == AppRouter.accounts && !isAdmin) return false;
                 return true;
               }).map((item) {
                 final isActive = location == item.path ||

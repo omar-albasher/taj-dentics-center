@@ -6,6 +6,7 @@ import '../../../core/constants/app_colors.dart';
 import '../../../core/utils/responsive.dart';
 import '../data/expenses_repository.dart';
 import '../domain/expense_model.dart';
+import '../../accounts/data/accounts_repository.dart';
 
 class ExpensesScreen extends ConsumerWidget {
   const ExpensesScreen({super.key});
@@ -242,6 +243,8 @@ class ExpensesScreen extends ConsumerWidget {
                     .read(expensesRepositoryProvider)
                     .deleteExpense(expense.id);
                 ref.invalidate(expensesProvider);
+                ref.invalidate(accountBalancesProvider);
+                ref.invalidate(accountLedgerProvider);
                 if (context.mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(
@@ -283,6 +286,7 @@ class _ExpenseFormDialogState extends ConsumerState<_ExpenseFormDialog> {
   late String _category;
   late String _currency;
   late DateTime _date;
+  String? _selectedAccountId;
   bool _loading = false;
 
   bool get _isEditing => widget.expense != null;
@@ -302,6 +306,7 @@ class _ExpenseFormDialogState extends ConsumerState<_ExpenseFormDialog> {
     _category = exp?.category ?? 'rent';
     _currency = exp?.currency ?? 'SYP';
     _date = exp?.expenseDate ?? DateTime.now();
+    _selectedAccountId = exp?.accountId;
   }
 
   @override
@@ -344,6 +349,7 @@ class _ExpenseFormDialogState extends ConsumerState<_ExpenseFormDialog> {
               expenseDate: _date,
               description:
                   _descriptionCtrl.text.isEmpty ? null : _descriptionCtrl.text,
+              accountId: _selectedAccountId,
             );
       } else {
         await ref.read(expensesRepositoryProvider).addExpense(
@@ -353,8 +359,12 @@ class _ExpenseFormDialogState extends ConsumerState<_ExpenseFormDialog> {
               expenseDate: _date,
               description:
                   _descriptionCtrl.text.isEmpty ? null : _descriptionCtrl.text,
+              accountId: _selectedAccountId,
             );
       }
+
+      ref.invalidate(accountBalancesProvider);
+      ref.invalidate(accountLedgerProvider);
 
       if (!mounted) return;
       Navigator.pop(context);
@@ -382,6 +392,7 @@ class _ExpenseFormDialogState extends ConsumerState<_ExpenseFormDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final accountsAsync = ref.watch(accountBalancesProvider);
     return Dialog(
       backgroundColor: AppColors.cardBg,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
@@ -490,10 +501,51 @@ class _ExpenseFormDialogState extends ConsumerState<_ExpenseFormDialog> {
                                     color: AppColors.textPrimary,
                                     fontFamily: 'Cairo'))),
                       ],
-                      onChanged: (v) => setState(() => _currency = v ?? 'SYP'),
+                      onChanged: (v) => setState(() {
+                        _currency = v ?? 'SYP';
+                        _selectedAccountId = null;
+                      }),
                     ),
                   ),
                 ],
+              ),
+
+              SizedBox(height: Responsive.spacing(context, 12)),
+
+              // Account Selector (Optional - defaults to cash box)
+              accountsAsync.maybeWhen(
+                data: (accounts) {
+                  final matchingAccounts = accounts
+                      .where((a) => a.currency == _currency && a.isActive)
+                      .toList();
+                  return DropdownButtonFormField<String?>(
+                    key: ValueKey('exp_acc_${_currency}_$_selectedAccountId'),
+                    initialValue: _selectedAccountId,
+                    dropdownColor: AppColors.cardBg,
+                    decoration: _inputDecoration(
+                        'خصم من حساب (اختياري)', Icons.account_balance_wallet_outlined),
+                    items: [
+                      const DropdownMenuItem<String?>(
+                        value: null,
+                        child: Text('تلقائي (صندوق المركز للعملة)',
+                            style: TextStyle(
+                                color: AppColors.textSecondary,
+                                fontFamily: 'Cairo')),
+                      ),
+                      ...matchingAccounts.map((a) => DropdownMenuItem<String?>(
+                            value: a.accountId,
+                            child: Text(
+                              '${a.nameAr} (${a.currency}) — رصيد: ${AppFormatters.amount.format(a.balance.toInt())}',
+                              style: const TextStyle(
+                                  color: AppColors.textPrimary,
+                                  fontFamily: 'Cairo'),
+                            ),
+                          )),
+                    ],
+                    onChanged: (v) => setState(() => _selectedAccountId = v),
+                  );
+                },
+                orElse: () => const SizedBox.shrink(),
               ),
 
               SizedBox(height: Responsive.spacing(context, 12)),

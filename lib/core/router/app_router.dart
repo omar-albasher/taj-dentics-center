@@ -19,6 +19,7 @@ import '../../features/surveys/presentation/surveys_screen.dart';
 import '../../features/calendar/presentation/calendar_screen.dart';
 import '../../features/users/presentation/users_screen.dart';
 import '../../features/audit/presentation/audit_screen.dart';
+import '../../features/accounts/presentation/accounts_screen.dart';
 import '../utils/jwt_utils.dart';
 import '../auth/authorization_policy.dart';
 
@@ -36,6 +37,7 @@ class AppRouter {
   static const sessions = '/sessions';
   static const payments = '/payments';
   static const expenses = '/expenses';
+  static const accounts = '/accounts';
   static const dentalLab = '/dental-lab';
   static const reports = '/reports';
   static const surveys = '/surveys';
@@ -88,6 +90,7 @@ class AppRouter {
           GoRoute(path: sessions, builder: (_, __) => const SessionsScreen()),
           GoRoute(path: payments, builder: (_, __) => const PaymentsScreen()),
           GoRoute(path: expenses, builder: (_, __) => const ExpensesScreen()),
+          GoRoute(path: accounts, builder: (_, __) => const AccountsScreen()),
           GoRoute(path: dentalLab, builder: (_, __) => const DentalLabScreen()),
           GoRoute(path: reports, builder: (_, __) => const ReportsScreen()),
           GoRoute(path: surveys, builder: (_, __) => const SurveysScreen()),
@@ -127,7 +130,8 @@ class AppRouter {
         state.matchedLocation.startsWith(audit) ||
         state.matchedLocation.startsWith(users) ||
         state.matchedLocation.startsWith(reports) ||
-        state.matchedLocation.startsWith(expenses);
+        state.matchedLocation.startsWith(expenses) ||
+        state.matchedLocation.startsWith(accounts);
 
     if (isAdminOnlyRoute && role != 'admin') {
       return dashboard;

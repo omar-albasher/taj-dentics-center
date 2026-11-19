@@ -19,15 +19,20 @@ class ExpensesRepository {
     required String currency,
     required DateTime expenseDate,
     String? description,
+    String? accountId,
   }) async {
-    await _client.from('expenses').insert({
+    final payload = <String, dynamic>{
       'category': category,
       'amount': amount,
       'currency': currency,
       'expense_date': expenseDate.toIso8601String().split('T')[0],
       'description': description,
       'performed_by': _client.auth.currentUser!.id,
-    });
+    };
+    if (accountId != null && accountId.isNotEmpty) {
+      payload['account_id'] = accountId;
+    }
+    await _client.from('expenses').insert(payload);
   }
 
   Future<void> updateExpense({
@@ -37,6 +42,7 @@ class ExpensesRepository {
     required String currency,
     required DateTime expenseDate,
     String? description,
+    String? accountId,
   }) async {
     await _client.from('expenses').update({
       'category': category,
@@ -44,6 +50,9 @@ class ExpensesRepository {
       'currency': currency,
       'expense_date': expenseDate.toIso8601String().split('T')[0],
       'description': description,
+      // يُرسَل دائماً (حتى null) حتى يستطيع المدير إرجاع المصروف
+      // إلى الربط التلقائي بدل إبقاء حساب قديم مخفي.
+      'account_id': accountId,
     }).eq('id', id);
   }
 

@@ -114,8 +114,9 @@ class PaymentsRepository {
     String? receiptNumber,
     String? externalReference,
     DateTime? paidAt,
+    String? accountId,
   }) async {
-    await _client.from('payments').insert({
+    final payload = <String, dynamic>{
       'enrollment_id': enrollmentId,
       'amount': amount,
       'currency': currency,
@@ -125,7 +126,11 @@ class PaymentsRepository {
       'external_reference': externalReference,
       'performed_by': _client.auth.currentUser!.id,
       'paid_at': (paidAt ?? DateTime.now()).toUtc().toIso8601String(),
-    });
+    };
+    if (accountId != null && accountId.isNotEmpty) {
+      payload['account_id'] = accountId;
+    }
+    await _client.from('payments').insert(payload);
   }
 
   Future<List<Map<String, dynamic>>> getEnrollmentInstallments(
