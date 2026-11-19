@@ -2,10 +2,10 @@
 
 **Extraction Date:** 2026-11-17 12:12:00 UTC+3  
 **Versions:** pg_dump 17.12 (client) / PostgreSQL 17.6 (Supabase hosted, AWS eu-west-1)  
-**Authoritative Raw Dump:** `supabase/baseline/schema_live_20261117.sql` (319,289 bytes, 9,856 lines)  
+**Authoritative Raw Dump (Pre-C2 Base):** `supabase/baseline/schema_live_20261117.sql` (319,289 bytes, 9,856 lines; represents the Pre-C2 canonical foundation before migrations 01–08)  
 **Canonical Rebuild File:** `supabase/baseline/canonical_foundation.sql` (LF-only, zero BOM, client directives stripped, safe schema creation)  
 **Validation Fingerprint:** `9f2ee2ee3f981ee2aa73d0fad04d7657`  
-**Status:** Certified Post-C2 Live Baseline (Verified 17/17 PASS on Live DB; Policy Fingerprint Match 100%)
+**Status:** Certified Post-C2 Canonical Baseline (Cold-start Verified 16/17 on secondary project; Fingerprint Match 100%; Live DB 17/17 PASS)
 
 ---
 
@@ -87,6 +87,10 @@ Components outside the `public` schema are maintained in modular files under `su
   - `public.verify_pin(text)`, `public.set_user_pin(text)`, `public.remove_user_pin()`: Isolated PIN management.
   - `public.create_session(...)`, `public.open_session(uuid)`, `public.close_session(uuid)`: Atomic staff-only RPCs.
   - `public.shift_cohort_sessions(uuid, date)`: Damascus timezone-safe rescheduling preserving wall clock.
+* **Phase C2 Custody Ledger & Backfill Invariants:**
+  - Single-entry custody ledger per account where balance = Σ(inflow) − Σ(outflow). Internal transfers record two reciprocal rows.
+  - Written exclusively via triggers and RPC (`SECURITY DEFINER`, search_path pinned to `public, pg_temp`, admin-only). No direct staff write path exists via REST API (enforced by revoked grants and read-only RLS). Triggers synchronize corresponding ledger rows upon source payment/expense update or deletion.
+  - Historical backfill executed on live DB (verified on 2026-11-20: `payments` unassigned = 0, `expenses` unassigned = 0).
 * **Hardened Security Triggers:**
   - `trg_guard_users_admin_changes` on `public.users`: Protects against self-demotion, self-deactivation, and demotion of the last active admin even under service_role.
   - `reception_insert` on `public.payments`: Enforces `performed_by = auth.uid()`.
