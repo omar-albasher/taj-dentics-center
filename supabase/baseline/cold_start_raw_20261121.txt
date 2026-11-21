@@ -1,0 +1,50 @@
+# Copy of query results and acceptance test summary from Supabase Studio SQL Editor
+# Project Ref: pjtgwaxdjtvdzvoazkxv
+# Timestamp: 2026-11-21 10:31:11 UTC+3 (07:31:11 UTC)
+# Script: supabase/baseline/validate_rebuild.sql
+
+## Session Identity:
+| current_database | current_user | inet_server_addr                           | now                           |
+| ---------------- | ------------ | ------------------------------------------ | ----------------------------- |
+| postgres         | postgres     | 2a05:d014:128e:9501:250b:1c22:5ff5:88b/128 | 2026-11-21 07:31:11.656743+00 |
+
+## Rebuild Validation:
+
+| check_id | metric                            | expected                         | actual                           | status |
+| -------- | --------------------------------- | -------------------------------- | -------------------------------- | ------ |
+| C01      | Tables in public                  | 43                               | 43                               | PASS   |
+| C02      | Views in public                   | 33                               | 33                               | PASS   |
+| C03      | Functions in public               | 107                              | 107                              | PASS   |
+| C04      | Policies in public                | 71                               | 71                               | PASS   |
+| C05      | Triggers in public                | 68                               | 68                               | PASS   |
+| C06      | Indexes in public                 | 127                              | 127                              | PASS   |
+| C07      | Sequences in public               | 3                                | 3                                | PASS   |
+| C08      | Enums in public                   | 9                                | 9                                | PASS   |
+| C09      | RLS Enabled Tables                | 43                               | 43                               | PASS   |
+| C10      | RLS Forced Tables                 | 0                                | 0                                | PASS   |
+| C11      | Unpinned SecDef Functions         | 0                                | 0                                | PASS   |
+| C12      | Policy MD5 Fingerprint            | c8215afa7997fb5258254047a879d68a | c8215afa7997fb5258254047a879d68a | PASS   |
+| C13      | Storage Bucket (course-materials) | true                             | true                             | PASS   |
+| C14      | Storage Policies on objects       | 2                                | 2                                | PASS   |
+| C15      | Distinct Core Cron Jobs           | 5                                | 5                                | PASS   |
+| C16      | Platform Extensions               | 6                                | 6                                | PASS   |
+| C17      | Vault Push Scheduler Secrets      | 3                                | 0                                | FAIL   |
+
+# Isolation Confirmation:
+# C17 = 0 proves 100% independent cold-start environment prior to vault secret provisioning.
+# Production project (nmczthzqbpkvweshitvv) has C17 = 3.
+
+## Phase C3 Functional Acceptance Suite Proof (6/6 PASS):
+# Summary of test assertions and NOTICE outputs from Supabase Studio
+# Script: supabase/tests/20261120000010_phase_c3_acceptance_proof.sql
+# Timestamp: 2026-11-21 10:42:28 UTC+3
+
+| test_num | test_description                                                                 | status |
+| -------- | -------------------------------------------------------------------------------- | ------ |
+| Test 1   | All 10 C3 tables and 5 views exist with RLS enabled                              | PASS   |
+| Test 2   | Trainer agreement and automatic cohort rate snapshot (25%) verified              | PASS   |
+| Test 3   | Trainer dues generated (50,000 SYP) and paid via C2 custody expense              | PASS   |
+| Test 4   | Payroll generated (Net: 855,000 SYP), approved, and paid via C2 custody expenses | PASS   |
+| Test 5   | Reception role is 100% isolated from populated C3 tables, views & RPCs           | PASS   |
+| Test 6   | Audit triggers captured all compensation & payroll changes                       | PASS   |
+

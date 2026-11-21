@@ -240,6 +240,32 @@ class _CommandPaletteDialogState extends State<CommandPaletteDialog> {
         },
       ),
       CommandItem(
+        id: 'nav_trainer_dues',
+        title: 'أتعاب المدربين ونسب الدفعات',
+        subtitle: 'اتفاقيات المدربين، تجميد نسب الدفعات، ومستحقات الصرف',
+        keywords: ['مدربين', 'أتعاب', 'نسب', 'دفعات', 'trainers', 'dues', 'rates'],
+        icon: Icons.school_outlined,
+        category: CommandCategory.navigation,
+        adminOnly: true,
+        onSelect: () {
+          Navigator.of(context).pop();
+          context.go(AppRouter.trainerDues);
+        },
+      ),
+      CommandItem(
+        id: 'nav_payroll',
+        title: 'رواتب ومستحقات الكادر',
+        subtitle: 'رواتب شهرية، عمولة إحالة 2.5%، سلف ومكافآت، ومسير الرواتب',
+        keywords: ['رواتب', 'كادر', 'سلف', 'مكافآت', 'عمولة', 'مسير', 'payroll', 'salary'],
+        icon: Icons.badge_outlined,
+        category: CommandCategory.navigation,
+        adminOnly: true,
+        onSelect: () {
+          Navigator.of(context).pop();
+          context.go(AppRouter.payroll);
+        },
+      ),
+      CommandItem(
         id: 'nav_dental_lab',
         title: 'المخبر والتعويضات السنية',
         subtitle: 'فواتير الأطباء والعيادات ومصاريف وأرباح المخبر المستقلة',
