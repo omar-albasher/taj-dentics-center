@@ -1,22 +1,22 @@
-# Secondary Project Cold-Start Audit Evidence (#47 — Post-C3.8)
+# Secondary Project Cold-Start Audit Evidence (#48 — Post-C4)
 
-**Latest Post-C3.8 Audit:** 2026-11-21 10:31:11 UTC+3 (07:31:11 UTC)  
+**Latest Post-C4 Audit:** 2026-11-22 18:00:10 UTC+3  
 **Target Environment:** Secondary Clean Supabase Project (`pjtgwaxdjtvdzvoazkxv`)  
 **Verification Script:** `supabase/baseline/validate_rebuild.sql`  
-**Execution Sequence:** `extensions.sql` -> `canonical_foundation.sql` -> C2 migrations `01..08` -> C3 migrations `01..09` -> `storage.sql` -> `cron_jobs.sql` -> `validate_rebuild.sql`
+**Execution Sequence:** `extensions.sql` -> `canonical_foundation.sql` -> C2 migrations `01..08` -> C3 migrations `01..09` -> C4 migration `20261121000001` -> `storage.sql` -> `cron_jobs.sql` -> `validate_rebuild.sql`
 
 ---
 
-## 1. Post-C3.8 Cold-Start Output Table (Executed 2026-11-21 10:31:11 UTC+3)
+## 1. Post-C4 Cold-Start Output Table (Executed 2026-11-22 18:00:10 UTC+3)
 
 | check_id | metric | expected | actual | status |
 | :--- | :--- | :--- | :--- | :--- |
 | C01 | Tables in public | 43 | 43 | **PASS** |
 | C02 | Views in public | 33 | 33 | **PASS** |
-| C03 | Functions in public | 107 | 107 | **PASS** |
+| C03 | Functions in public | 111 | 111 | **PASS** |
 | C04 | Policies in public | 71 | 71 | **PASS** |
 | C05 | Triggers in public | 68 | 68 | **PASS** |
-| C06 | Indexes in public | 127 | 127 | **PASS** |
+| C06 | Indexes in public | 130 | 130 | **PASS** |
 | C07 | Sequences in public | 3 | 3 | **PASS** |
 | C08 | Enums in public | 9 | 9 | **PASS** |
 | C09 | RLS Enabled Tables | 43 | 43 | **PASS** |
@@ -29,7 +29,7 @@
 | C16 | Platform Extensions | 6 | 6 | **PASS** |
 | C17 | Vault Push Scheduler Secrets | 3 | 0 | **FAIL** (Expected prior to Vault secret provisioning — confirms clean isolation) |
 
-> **Raw Output File:** Markdown copy of query results recorded in [cold_start_raw_20261121.txt](file:///d:/flutter-projects/admin_dashboard/supabase/baseline/cold_start_raw_20261121.txt).
+> **Raw Output File:** Markdown copy of query results recorded in [cold_start_raw_20261122.txt](file:///d:/flutter-projects/admin_dashboard/supabase/baseline/cold_start_raw_20261122.txt).
 > **Isolation Proof (C17 = 0):** Clean secondary database has 0 vault secrets prior to secret provisioning, whereas production (`nmczthzqbpkvweshitvv`) returns 3.
 
 ### Target Environment Session Proof:
@@ -37,23 +37,27 @@
 - `dashboard_url`: `https://supabase.com/dashboard/project/pjtgwaxdjtvdzvoazkxv`
 - `current_database`: `postgres`
 - `current_user`: `postgres`
-- `inet_server_addr`: `2a05:d014:128e:9501:250b:1c22:5ff5:88b/128`
-- `execution_timestamp`: `2026-11-21 07:31:11 UTC`
-- Status: **Empirically Verified Independent Cold-Start Rebuild (Post-C3.8) — 16/17 Platform Checks (16/16 Core Schema PASS, C17 Isolated Pre-Vault)**
+- `inet_server_addr`: `2a05:d014:128e:9501:250b:1c22:5ff5:88b`
+- `execution_timestamp`: `2026-11-22 15:14:41 UTC` (18:14:41 Damascus / UTC+3)
+- Status: **Empirically Verified Independent Cold-Start Rebuild (Post-C4) — 16/17 Platform Checks (16/16 Core Schema Invariants PASS, C17 Isolated Pre-Vault)**
 
-### Functional Acceptance Suite Proof (`phase_c3_acceptance_proof.sql`):
-- **Execution Timestamp:** 2026-11-21 10:42:28 UTC+3
-- **Raw Execution Result:** All 6/6 test assertions passed in clean rollback transaction (recorded in [cold_start_raw_20261121.txt](file:///d:/flutter-projects/admin_dashboard/supabase/baseline/cold_start_raw_20261121.txt))
-- **Verified Invariants (6/6 PASS):**
-  1. All 10 C3 tables and 5 views exist with RLS enabled.
-  2. Reception role is 100% isolated (0 rows visible on tables/views, RPC calls rejected).
-  3. Trainer agreement created, cohort rate snapshot (25%) frozen, and overlapping agreement rejected.
-  4. Trainer dues generated (50,000 SYP) and paid via `pay_trainer_due` expense, automatically creating C2 ledger transaction.
-  5. Staff payroll generated (855,000 SYP net = salary + 2.5% referral + bonus - advance), approved, and paid via C2 custody expenses.
-  6. Audit trail captured all compensation and payroll mutations.
+### Functional Acceptance Suite Proof (`phase_c4_acceptance_proof.sql`):
+- **Script:** `supabase/tests/20261121000002_phase_c4_acceptance_proof.sql`
+- **Safety:** Transactional execution enclosed in `BEGIN ... ROLLBACK`
+- **Result:** All 9/9 acceptance tests passed without error (`Success. No rows returned`)
+- **Verified Invariants (9/9 PASS):**
+  1. **Test 1**: P&L arithmetic matches payments/refunds/expenses per currency (`income - refunds - expenses = net`).
+  2. **Test 2**: Expense breakdown reconciles with P&L category totals.
+  3. **Test 3**: Cash flow per account reconciles with the C2 ledger (`account_transactions`) and `account_balances_v`.
+  4. **Test 4**: Internal transfers between accounts are strictly P&L-neutral and reflected only in cash flow.
+  5. **Test 5**: Lab section is isolated from Academy and `memorandum_uncollected` accurately tracks uncollected lab invoices.
+  6. **Test 6**: Financial integrity function confirms every operational event matches the custody ledger.
+  7. **Test 7**: Guard against invalid date periods (`p_to < p_from`) properly throws exception.
+  8. **Test 8**: Reception role is denied execution across all four C4 functions (`c1_is_admin()` check).
+  9. **Test 9**: Anonymous role is denied at the PostgreSQL grant level.
 
 ### Verdict & Architectural Confirmation:
-1. **16/16 Core Schema Invariants PASS (16/17 Platform Checks)**: All 43 tables, 33 views, 107 functions, 71 policies, 68 triggers, 127 indexes, 3 sequences, and 9 enums were created perfectly from scratch. Check C17 returns 0 (FAIL) as expected prior to Vault secrets provisioning, confirming environment isolation.
+1. **16/16 Core Schema Invariants PASS (16/17 Platform Checks)**: All 43 tables, 33 views, 111 functions (including 4 C4 reporting RPCs), 71 policies, 68 triggers, 130 indexes (including 3 C4 indexes), 3 sequences, and 9 enums were created perfectly from scratch. Check C17 returns 0 (FAIL) as expected prior to Vault secrets provisioning, confirming environment isolation.
 2. **100% Policy Fingerprint Determinism**: Policy MD5 fingerprint `c8215afa7997fb5258254047a879d68a` on the clean secondary project matches production bit-for-bit.
 3. **Custody & Advance Synchronization Verified**: C3.8 advances are tied directly to the custody ledger via automatic expense rows and isolated via `cancel_staff_advance`.
 

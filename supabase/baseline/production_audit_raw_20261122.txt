@@ -1,0 +1,35 @@
+# Raw Production Database Validator Output (Post-C4)
+# Project Ref: nmczthzqbpkvweshitvv
+# Timestamp: 2026-11-22 18:40:20 UTC+3 (15:40:20 UTC)
+# Script: supabase/baseline/validate_rebuild.sql
+
+## Session Identity:
+| inet_server_addr                       | current_database | current_user | now                           |
+| -------------------------------------- | ---------------- | ------------ | ----------------------------- |
+| 2a05:d018:48a:c902:2d02:8d28:a30f:5129 | postgres         | postgres     | 2026-11-22 15:40:20.474011+00 |
+
+## Validation Output (17/17 PASS):
+| check_id | metric                            | expected                         | actual                           | status |
+| -------- | --------------------------------- | -------------------------------- | -------------------------------- | ------ |
+| C01      | Tables in public                  | 43                               | 43                               | PASS   |
+| C02      | Views in public                   | 33                               | 33                               | PASS   |
+| C03      | Functions in public               | 111                              | 111                              | PASS   |
+| C04      | Policies in public                | 71                               | 71                               | PASS   |
+| C05      | Triggers in public                | 68                               | 68                               | PASS   |
+| C06      | Indexes in public                 | 130                              | 130                              | PASS   |
+| C07      | Sequences in public               | 3                                | 3                                | PASS   |
+| C08      | Enums in public                   | 9                                | 9                                | PASS   |
+| C09      | RLS Enabled Tables                | 43                               | 43                               | PASS   |
+| C10      | RLS Forced Tables                 | 0                                | 0                                | PASS   |
+| C11      | Unpinned SecDef Functions         | 0                                | 0                                | PASS   |
+| C12      | Policy MD5 Fingerprint            | c8215afa7997fb5258254047a879d68a | c8215afa7997fb5258254047a879d68a | PASS   |
+| C13      | Storage Bucket (course-materials) | true                             | true                             | PASS   |
+| C14      | Storage Policies on objects       | 2                                | 2                                | PASS   |
+| C15      | Distinct Core Cron Jobs           | 5                                | 5                                | PASS   |
+| C16      | Platform Extensions               | 6                                | 6                                | PASS   |
+| C17      | Vault Push Scheduler Secrets      | 3                                | 3                                | PASS   |
+
+# Isolation & Parity Confirmation:
+# Production has C17 = 3 (Vault secrets present), perfectly matching the contract.
+# Secondary project has C17 = 0, proving isolated cold-start rebuild.
+# Policy MD5 fingerprint is bit-identical across both environments: c8215afa7997fb5258254047a879d68a.

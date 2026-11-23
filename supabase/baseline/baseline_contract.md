@@ -1,25 +1,25 @@
-# Taj Dentics Database Live Baseline Contract (#47 — Post-C3.8)
+# Taj Dentics Database Live Baseline Contract (#47 — Post-C4)
 
 **Extraction Date:** 2026-11-17 12:12:00 UTC+3  
 **Versions:** pg_dump 17.12 (client) / PostgreSQL 17.6 (Supabase hosted, AWS eu-west-1)  
 **Authoritative Raw Dump (Pre-C2 Base):** `supabase/baseline/schema_live_20261117.sql` (319,289 bytes, 9,856 lines; represents the Pre-C2 canonical foundation before migrations 01–08)  
 **Canonical Rebuild File:** `supabase/baseline/canonical_foundation.sql` (LF-only, zero BOM, client directives stripped, safe schema creation)  
 **Validation Fingerprint:** `c8215afa7997fb5258254047a879d68a`  
-**Status:** Certified Post-C3.8 Canonical Baseline (Rebuild Invariants Verified 16/17 pre-Vault on secondary project [C17=0 isolation proof]; 17/17 expected upon Vault provisioning; Fingerprint Match 100%: c8215afa7997fb5258254047a879d68a; Live DB 17/17 certified historically)
+**Status:** Certified Post-C4 Canonical Baseline (Rebuild Invariants Verified 16/17 pre-Vault on secondary project [C17=0 isolation proof]; Live Production Verified 17/17 PASS on nmczthzqbpkvweshitvv at 2026-11-22 18:40:20 UTC+3 [raw proof: production_audit_raw_20261122.txt]; Fingerprint Match 100%: c8215afa7997fb5258254047a879d68a).
 
 ---
 
 ## 1. Executive Summary & Architectural Invariants
-This baseline captures the complete, authoritative live schema state of Taj Dentics database following Phase D5 hardening, Phase C2 custody ledger, and Phase C3 trainer compensation & staff payroll migrations (20261120000001 through 20261120000009):
+This baseline captures the complete, authoritative live schema state of Taj Dentics database following Phase D5 hardening, Phase C2 custody ledger, Phase C3 trainer compensation & staff payroll migrations (20261120000001 through 20261120000009), and Phase C4 financial statements reporting (20261121000001):
 
 | Class | Count | Status | Notes |
 | :--- | :--- | :--- | :--- |
 | Tables | **43** | Certified | 30 foundational + `user_pins` + 2 C2 custody tables + 10 C3 compensation & payroll tables |
 | Views | **33** | Certified | 26 foundational views + 2 C2 views + 5 C3 compensation & payroll views |
-| Functions | **107** | Certified | 100% of `SECURITY DEFINER` functions have pinned `search_path` |
+| Functions | **111** | Certified | 107 foundational & C2/C3 + 4 C4 read-only reporting functions; 100% of `SECURITY DEFINER` functions have pinned `search_path` |
 | RLS Policies | **71** | Certified | 61 foundational & C2 + 10 C3 `admin_all` policies |
 | Triggers | **68** | Certified | 50 foundational + 3 C2 + 4 C3 triggers + 11 C3 audit triggers |
-| Indexes | **127** | Certified | Foundation + C2 ledger + 31 C3 indexes |
+| Indexes | **130** | Certified | 127 foundational & C2/C3 + 3 C4 period indexes (`payments.paid_at`, `expenses.expense_date`, `lab_payments.paid_at`) |
 | Sequences | **3** | Certified | `audit_log_id_seq`, `trainee_code_seq`, `lab_invoice_number_seq` |
 | Enums | **9** | Certified | 9 enum types (8 foundational + `public.account_type`); `expense_category` gained values `trainer_fee` and `salary_advance` (values not counted by C08) |
 | RLS Enabled | **43** | Certified | 100% of tables have row-level security enabled |
@@ -96,6 +96,11 @@ Components outside the `public` schema are maintained in modular files under `su
   - Rate percentages frozen per cohort via `cohort_trainer_rate_snapshots`; historical cohorts never modified by future agreement rate changes.
   - Payouts (trainer dues & monthly payroll) registered as `expenses` rows under `trainer_fee` and `salary` categories, naturally triggering C2 custody ledger movements without duplicate bookkeeping.
   - Complete auditability: 11 audit triggers capture before/after states on all C3 tables and `account_transactions`.
+* **Phase C4 Financial Statements (read-only reporting):**
+  - Four admin-only `SECURITY DEFINER` RPCs with pinned `search_path` (`public, pg_temp`): `get_profit_loss(date, date)`, `get_expense_breakdown(date, date)`, `get_cash_flow_statement(date, date)`, `get_financial_integrity()`. `EXECUTE` is revoked from `PUBLIC` and `anon`.
+  - Academy P&L is cash-basis; the lab is a separate labelled section. Uncollected lab invoices are a memorandum item only and never enter net profit.
+  - Cash flow is derived exclusively from C2 `account_transactions`, so opening + inflows − outflows = closing per account.
+  - No tables, views, policies, triggers, or enums are added: C01/C02/C04/C05/C08/C12 remain unchanged and C11 stays 0.
 * **Hardened Security Triggers:**
   - `trg_guard_users_admin_changes` on `public.users`: Protects against self-demotion, self-deactivation, and demotion of the last active admin even under service_role.
   - `reception_insert` on `public.payments`: Enforces `performed_by = auth.uid()`.
@@ -109,16 +114,18 @@ Components outside the `public` schema are maintained in modular files under `su
 2. `supabase/baseline/canonical_foundation.sql` (Create canonical public schema)
 3. Apply Phase C2 Migrations: `supabase/migrations/20261118000001_financial_accounts.sql` through `20261118000008_account_ledger_v.sql` (Authoritative source for Phase C2 schema, triggers, RLS, and views)
 4. Apply Phase C3 Migrations: `supabase/migrations/20261120000001_add_expense_category_trainer_fee.sql` through `20261120000009_staff_advance_expense.sql` (Trainer compensation, staff payroll, advances, and audit triggers)
-5. `supabase/platform/storage.sql` (Create bucket & storage policies)
-6. `supabase/platform/cron_jobs.sql` (Register 5 core cron jobs)
-7. Deploy Edge Functions (`manage-user`, `send-fcm-notification`, `create-trainee`, `smart-responder`)
-8. Configure Edge Function Secrets (`CRON_SECRET`, `FIREBASE_SERVICE_ACCOUNT`)
-9. `supabase/platform/vault_secrets.sql` (Provide real project URL, cron secret, and push slug)
-10. Configure Auth Hook in Dashboard (`supabase/platform/auth_hooks.md`)
-11. Run Verification Script:
+5. Apply Phase C4 Migration: `supabase/migrations/20261121000001_phase_c4_financial_statements.sql` (Read-only financial statements: 4 RPCs + 3 indexes)
+6. `supabase/platform/storage.sql` (Create bucket & storage policies)
+7. `supabase/platform/cron_jobs.sql` (Register 5 core cron jobs)
+8. Deploy Edge Functions (`manage-user`, `send-fcm-notification`, `create-trainee`, `smart-responder`)
+9. Configure Edge Function Secrets (`CRON_SECRET`, `FIREBASE_SERVICE_ACCOUNT`)
+10. `supabase/platform/vault_secrets.sql` (Provide real project URL, cron secret, and push slug)
+11. Configure Auth Hook in Dashboard (`supabase/platform/auth_hooks.md`)
+12. Run Verification Script:
    ```sql
    \i supabase/baseline/validate_rebuild.sql
    ```
 * **Expected Outcome:**
-  - All 17 checks evaluated: **17/17 PASS**.
-  - Verified policy fingerprint: `c8215afa7997fb5258254047a879d68a`.
+  - All 17 checks evaluated: **17/17 PASS** (C03 = 111 functions, C06 = 130 indexes).
+  - Verified policy fingerprint (unchanged by C4): `c8215afa7997fb5258254047a879d68a`.
+  - Optional C4 acceptance suite: `supabase/tests/20261121000002_phase_c4_acceptance_proof.sql` → 9/9 assertions, ends in `ROLLBACK`.

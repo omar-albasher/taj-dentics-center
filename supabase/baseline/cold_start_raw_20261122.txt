@@ -1,0 +1,30 @@
+# Raw Cold-Start Validator Output — Secondary Database
+# Project Ref: pjtgwaxdjtvdzvoazkxv
+# Timestamp: 2026-11-22 18:00:10 UTC+3
+# Script: supabase/baseline/validate_rebuild.sql
+
+## Session Identity:
+| current_database | current_user | inet_server_addr                       | now                           |
+| ---------------- | ------------ | -------------------------------------- | ----------------------------- |
+| postgres         | postgres     | 2a05:d014:128e:9501:250b:1c22:5ff5:88b | 2026-11-22 15:14:41.334275+00 |
+
+## Rebuild Validation:
+| check_id | metric                            | expected                         | actual                           | status |
+| -------- | --------------------------------- | -------------------------------- | -------------------------------- | ------ |
+| C01      | Tables in public                  | 43                               | 43                               | PASS   |
+| C02      | Views in public                   | 33                               | 33                               | PASS   |
+| C03      | Functions in public               | 111                              | 111                              | PASS   |
+| C04      | Policies in public                | 71                               | 71                               | PASS   |
+| C05      | Triggers in public                | 68                               | 68                               | PASS   |
+| C06      | Indexes in public                 | 130                              | 130                              | PASS   |
+| C07      | Sequences in public               | 3                                | 3                                | PASS   |
+| C08      | Enums in public                   | 9                                | 9                                | PASS   |
+| C09      | RLS Enabled Tables                | 43                               | 43                               | PASS   |
+| C10      | RLS Forced Tables                 | 0                                | 0                                | PASS   |
+| C11      | Unpinned SecDef Functions         | 0                                | 0                                | PASS   |
+| C12      | Policy MD5 Fingerprint            | c8215afa7997fb5258254047a879d68a | c8215afa7997fb5258254047a879d68a | PASS   |
+| C13      | Storage Bucket (course-materials) | true                             | true                             | PASS   |
+| C14      | Storage Policies on objects       | 2                                | 2                                | PASS   |
+| C15      | Distinct Core Cron Jobs           | 5                                | 5                                | PASS   |
+| C16      | Platform Extensions               | 6                                | 6                                | PASS   |
+| C17      | Vault Push Scheduler Secrets      | 3                                | 0                                | FAIL   |

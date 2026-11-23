@@ -11,6 +11,7 @@ import 'package:file_saver/file_saver.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../data/reports_repository.dart';
+import 'widgets/financial_statements_tab.dart';
 
 String _money(num value, String? currency) {
   final formatted = AppFormatters.amount.format(value.round());
@@ -47,7 +48,7 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 7, vsync: this);
+    _tabController = TabController(length: 8, vsync: this);
   }
 
   @override
@@ -139,6 +140,7 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen>
                 Tab(text: 'أعمار الديون والخصومات'),
                 Tab(text: 'توزيع المصاريف'),
                 Tab(text: 'الحضور'),
+                Tab(text: 'القوائم المالية (v3)'),
               ],
             ),
             SizedBox(height: Responsive.spacing(context, 16)),
@@ -184,6 +186,12 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen>
                   ),
                   KeepAliveWrapper(
                     child: _AttendanceReportTab(onExport: _exportCsv),
+                  ),
+                  KeepAliveWrapper(
+                    child: FinancialStatementsTab(
+                      currencyFilter: _selectedCurrency,
+                      onExport: _exportCsv,
+                    ),
                   ),
                 ],
               ),

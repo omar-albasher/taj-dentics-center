@@ -1,9 +1,54 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../domain/financial_statement_models.dart';
 
 class ReportsRepository {
   final _client = Supabase.instance.client;
 
+  // ─── Phase C4 Financial Statements (v3 RPCs) ───
+  Future<ProfitLossStatement> getProfitLoss(FinancialStatementPeriod period) async {
+    final response = await _client.rpc(
+      'get_profit_loss',
+      params: {
+        'p_from': period.fromIso,
+        'p_to': period.toIso,
+      },
+    );
+    final rows = List<Map<String, dynamic>>.from(response as List);
+    return ProfitLossStatement.fromRows(rows);
+  }
+
+  Future<List<ExpenseBreakdownItem>> getExpenseBreakdown(FinancialStatementPeriod period) async {
+    final response = await _client.rpc(
+      'get_expense_breakdown',
+      params: {
+        'p_from': period.fromIso,
+        'p_to': period.toIso,
+      },
+    );
+    final rows = List<Map<String, dynamic>>.from(response as List);
+    return rows.map(ExpenseBreakdownItem.fromMap).toList();
+  }
+
+  Future<CashFlowStatement> getCashFlowStatement(FinancialStatementPeriod period) async {
+    final response = await _client.rpc(
+      'get_cash_flow_statement',
+      params: {
+        'p_from': period.fromIso,
+        'p_to': period.toIso,
+      },
+    );
+    final rows = List<Map<String, dynamic>>.from(response as List);
+    return CashFlowStatement.fromRows(rows);
+  }
+
+  Future<FinancialIntegrityReport> getFinancialIntegrity() async {
+    final response = await _client.rpc('get_financial_integrity');
+    final rows = List<Map<String, dynamic>>.from(response as List);
+    return FinancialIntegrityReport.fromRows(rows);
+  }
+
+  // ─── Legacy / Existing Reports ───
   Future<List<Map<String, dynamic>>> getProfitLossReport() async {
     final response = await _client
         .from('profit_loss_report_v2')
@@ -118,4 +163,44 @@ final expensesByCategoryProvider =
 
 final cashVsAccrualProvider = FutureProvider<List<Map<String, dynamic>>>((ref) {
   return ref.watch(reportsRepositoryProvider).getCashVsAccrual();
+});
+
+// ─── Phase C4 Providers ───
+class FinancialStatementPeriodNotifier extends Notifier<FinancialStatementPeriod> {
+  @override
+  FinancialStatementPeriod build() {
+    final now = DateTime.now();
+    final startOfMonth = DateTime(now.year, now.month, 1);
+    return FinancialStatementPeriod(from: startOfMonth, to: now);
+  }
+
+  void setPeriod(FinancialStatementPeriod period) {
+    state = period;
+  }
+}
+
+final financialStatementPeriodProvider =
+    NotifierProvider<FinancialStatementPeriodNotifier, FinancialStatementPeriod>(
+  FinancialStatementPeriodNotifier.new,
+);
+
+final c4ProfitLossProvider = FutureProvider<ProfitLossStatement>((ref) {
+  final period = ref.watch(financialStatementPeriodProvider);
+  return ref.watch(reportsRepositoryProvider).getProfitLoss(period);
+});
+
+final c4ExpenseBreakdownProvider =
+    FutureProvider<List<ExpenseBreakdownItem>>((ref) {
+  final period = ref.watch(financialStatementPeriodProvider);
+  return ref.watch(reportsRepositoryProvider).getExpenseBreakdown(period);
+});
+
+final c4CashFlowProvider = FutureProvider<CashFlowStatement>((ref) {
+  final period = ref.watch(financialStatementPeriodProvider);
+  return ref.watch(reportsRepositoryProvider).getCashFlowStatement(period);
+});
+
+final c4FinancialIntegrityProvider =
+    FutureProvider<FinancialIntegrityReport>((ref) {
+  return ref.watch(reportsRepositoryProvider).getFinancialIntegrity();
 });
