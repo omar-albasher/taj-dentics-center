@@ -1,0 +1,638 @@
+SELECT inet_server_addr() AS server_ip, current_database(), current_user, now() AT TIME ZONE 'Asia/Damascus' AS damascus_time;
+               server_ip                | current_database | current_user |       damascus_time        
+----------------------------------------+------------------+--------------+----------------------------
+ 2a05:d018:48a:c902:2d02:8d28:a30f:5129 | postgres         | postgres     | 2026-11-24 18:26:55.127751
+(1 row)
+
+\i supabase/tests/20261123000002_phase_c5_acceptance_proof.sql
+-- ============================================================================
+-- Acceptance Suite: Phase C5 Accrual Revenue & Recognition Proof
+-- File: supabase/tests/20261123000002_phase_c5_acceptance_proof.sql
+-- Reference Migration MD5: 20e5bca96abbc0cf5112284147e12a3a
+-- Description:
+--   Verifies C5 accrual engine invariants, temporal accuracy, and security:
+--     Test 1: Session counting uses FILTER, eliminating Cartesian products (prior=2, delivered=2).
+--     Test 2: True temporal As-Of isolation: today payment is absent from yesterday report.
+--     Test 3: Referral discount is not double-deducted (net_due = 80k, earned = 32k, not 28k).
+--     Test 4: As-Of prior to future withdrawal recovers net_due_before and remains active.
+--     Test 5: Completed timestamp cutoff: yesterday is active (0.2), today is completed (1.0).
+--     Test 6: Withdrawn enrollment yields ratio 1.0 and earned = due_amount without double pro-rata.
+--     Test 7: Extra sessions (is_extra = true) are excluded from delivery counting.
+--     Test 8: complete_cohort blocks on future sessions even if is_active=false, succeeds with p_force.
+--     Test 9: Universal independent bounds: 0 <= earned <= net_due, 0 <= ratio <= 1.
+--     Test 10: Universal balance identity: earned + unearned - accrued = net_paid.
+--     Test 11: Period reconciliation bridge balances with cash movements across past/present periods.
+--     Test 12: Reception and Anonymous roles are denied access across all three functions with exact SQLSTATE.
+-- Safety: Fully transactional. Enclosed in BEGIN ... ROLLBACK.
+-- Output: Emits structured RAISE NOTICE outputs for every test in Messages tab.
+-- Requirements: Migration 20261123000001 applied first.
+-- ============================================================================
+BEGIN;
+BEGIN
+DO $$
+#variable_conflict use_column
+DECLARE
+  v_admin_id uuid;
+  v_reception_id uuid;
+  v_trainer_id uuid;
+  v_course_id uuid;
+  v_cohort_id uuid;
+  v_cohort2_id uuid;
+  v_cohort3_id uuid;
+  v_trainee1_id uuid;
+  v_trainee2_id uuid;
+  v_trainee3_id uuid;
+  v_trainee4_id uuid;
+  v_trainee5_id uuid;
+  v_trainee6_id uuid;
+
+  v_enr1_id uuid;
+  v_enr2_id uuid;
+  v_enr3_id uuid;
+  v_enr4_id uuid;
+  v_enr5_id uuid;
+  v_enr6_id uuid;
+
+  v_sess1_id uuid;
+  v_sess2_id uuid;
+  v_sess3_id uuid;
+  v_sess4_id uuid;
+  v_sess_extra_id uuid;
+  v_sess_sched_id uuid;
+
+  v_sess_c2_1 uuid;
+  v_sess_c2_2 uuid;
+  v_sess_c3_1 uuid;
+
+  v_today date := (now() AT TIME ZONE 'Asia/Damascus')::date;
+  v_yesterday date := ((now() AT TIME ZONE 'Asia/Damascus')::date - 1);
+  v_from date := ((now() AT TIME ZONE 'Asia/Damascus')::date - 20);
+  v_to date := ((now() AT TIME ZONE 'Asia/Damascus')::date + 10);
+
+  v_old_pay_id uuid;
+  v_today_pay_id uuid;
+
+  v_rec record;
+  v_res jsonb;
+  v_bad_bounds int := 0;
+  v_bad_accrual int := 0;
+  v_state text;
+  v_msg text;
+  v_caught boolean := false;
+  v_sample_json jsonb;
+BEGIN
+  RAISE NOTICE '=== Starting Phase C5 Accrual Revenue Acceptance Proof ===';
+  RAISE NOTICE 'Context: Database=%, User=%, DamascusDate=%, Clock=%',
+    current_database(), current_user, v_today, clock_timestamp();
+  RAISE NOTICE 'Contract Hashes: Migration_MD5=20e5bca96abbc0cf5112284147e12a3a';
+  RAISE NOTICE 'Operational Rule: Do not run within 60s of Damascus midnight (23:59:00 - 00:01:00)';
+
+  -- --------------------------------------------------------------------------
+  -- 0. Setup: Identify or mock admin and reception users
+  -- --------------------------------------------------------------------------
+  SELECT u.id INTO v_admin_id
+  FROM public.users u
+  JOIN auth.users a ON a.id = u.id
+  WHERE u.role = 'admin' AND u.is_active
+  LIMIT 1;
+
+  IF v_admin_id IS NULL THEN
+    v_admin_id := gen_random_uuid();
+    INSERT INTO auth.users (id, instance_id, aud, role, email, raw_app_meta_data, raw_user_meta_data, created_at, updated_at)
+    VALUES (v_admin_id, '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated',
+            'c5_admin_' || substr(v_admin_id::text, 1, 8) || '@example.com',
+            '{"provider":"email","providers":["email"]}',
+            '{"role":"admin"}', now(), now());
+    INSERT INTO public.users (id, full_name, email, role, is_active)
+    VALUES (v_admin_id, 'C5 Admin Test', 'c5_admin_' || substr(v_admin_id::text, 1, 8) || '@example.com', 'admin', true);
+  END IF;
+
+  SELECT u.id INTO v_reception_id
+  FROM public.users u
+  JOIN auth.users a ON a.id = u.id
+  WHERE u.role = 'reception' AND u.is_active
+  LIMIT 1;
+
+  IF v_reception_id IS NULL THEN
+    v_reception_id := gen_random_uuid();
+    INSERT INTO auth.users (id, instance_id, aud, role, email, raw_app_meta_data, raw_user_meta_data, created_at, updated_at)
+    VALUES (v_reception_id, '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated',
+            'c5_rec_' || substr(v_reception_id::text, 1, 8) || '@example.com',
+            '{"provider":"email","providers":["email"]}',
+            '{"role":"reception"}', now(), now());
+    INSERT INTO public.users (id, full_name, email, role, is_active)
+    VALUES (v_reception_id, 'C5 Reception Test', 'c5_rec_' || substr(v_reception_id::text, 1, 8) || '@example.com', 'reception', true);
+  END IF;
+
+  -- Act as Admin
+  PERFORM set_config('request.jwt.claims', json_build_object(
+    'sub', v_admin_id,
+    'role', 'authenticated',
+    'user_metadata', json_build_object('role', 'admin')
+  )::text, true);
+
+  -- --------------------------------------------------------------------------
+  -- 1. Fixtures: Courses, Cohorts, and Trainees
+  -- --------------------------------------------------------------------------
+  SELECT id INTO v_trainer_id FROM public.users WHERE role = 'admin' LIMIT 1;
+
+  -- Main Course (10 sessions, 100,000 SYP)
+  v_course_id := gen_random_uuid();
+  INSERT INTO public.courses (id, name, total_sessions, price, created_by, is_active)
+  VALUES (v_course_id, 'C5 Accrual Verification Course', 10, 100000.00, v_admin_id, true);
+
+  -- Main Cohort
+  v_cohort_id := gen_random_uuid();
+  INSERT INTO public.cohorts (id, course_id, trainer_id, name, starts_at, created_by, is_active)
+  VALUES (v_cohort_id, v_course_id, v_trainer_id, 'C5 Main Cohort', v_today - 30, v_admin_id, true);
+
+  -- Secondary Cohort for Completed cutoff test
+  v_cohort2_id := gen_random_uuid();
+  INSERT INTO public.cohorts (id, course_id, trainer_id, name, starts_at, created_by, is_active)
+  VALUES (v_cohort2_id, v_course_id, v_trainer_id, 'C5 Completed Cohort', v_today - 20, v_admin_id, true);
+
+  -- Tertiary Cohort 3 for Force completion test
+  v_cohort3_id := gen_random_uuid();
+  INSERT INTO public.cohorts (id, course_id, trainer_id, name, starts_at, created_by, is_active)
+  VALUES (v_cohort3_id, v_course_id, v_trainer_id, 'C5 Force Test Cohort', v_today - 5, v_admin_id, true);
+
+  -- Trainees
+  v_trainee1_id := gen_random_uuid();
+  INSERT INTO public.trainees (id, full_name_ar, created_by) VALUES (v_trainee1_id, 'متدرب أول منتظم C5', v_admin_id);
+
+  v_trainee2_id := gen_random_uuid();
+  INSERT INTO public.trainees (id, full_name_ar, created_by) VALUES (v_trainee2_id, 'متدرب ثان متأخر C5', v_admin_id);
+
+  v_trainee3_id := gen_random_uuid();
+  INSERT INTO public.trainees (id, full_name_ar, created_by) VALUES (v_trainee3_id, 'متدرب ثالث منسحب C5', v_admin_id);
+
+  v_trainee4_id := gen_random_uuid();
+  INSERT INTO public.trainees (id, full_name_ar, created_by) VALUES (v_trainee4_id, 'متدرب رابع إحالة وانسحاب لاحق C5', v_admin_id);
+
+  v_trainee5_id := gen_random_uuid();
+  INSERT INTO public.trainees (id, full_name_ar, created_by) VALUES (v_trainee5_id, 'متدرب خامس مكتمل C5', v_admin_id);
+
+  v_trainee6_id := gen_random_uuid();
+  INSERT INTO public.trainees (id, full_name_ar, created_by) VALUES (v_trainee6_id, 'متدرب سادس قوة الإقفال C5', v_admin_id);
+
+  -- --------------------------------------------------------------------------
+  -- 2. Sessions for Main Cohort:
+  --   Session 1: closed 25 days ago
+  --   Session 2: closed 20 days ago
+  --   Session 3: closed 10 days ago
+  --   Session 4: closed 5 days ago
+  --   Session Extra: closed 2 days ago (is_extra = true)
+  --   Session Scheduled: scheduled for tomorrow
+  -- --------------------------------------------------------------------------
+  v_sess1_id := gen_random_uuid();
+  INSERT INTO public.sessions (id, cohort_id, session_number, scheduled_at, status, closed_at, is_extra)
+  VALUES (v_sess1_id, v_cohort_id, 1, (v_today - 25)::timestamp with time zone, 'closed', (v_today - 25)::timestamp with time zone, false);
+
+  v_sess2_id := gen_random_uuid();
+  INSERT INTO public.sessions (id, cohort_id, session_number, scheduled_at, status, closed_at, is_extra)
+  VALUES (v_sess2_id, v_cohort_id, 2, (v_today - 20)::timestamp with time zone, 'closed', (v_today - 20)::timestamp with time zone, false);
+
+  v_sess3_id := gen_random_uuid();
+  INSERT INTO public.sessions (id, cohort_id, session_number, scheduled_at, status, closed_at, is_extra)
+  VALUES (v_sess3_id, v_cohort_id, 3, (v_today - 10)::timestamp with time zone, 'closed', (v_today - 10)::timestamp with time zone, false);
+
+  v_sess4_id := gen_random_uuid();
+  INSERT INTO public.sessions (id, cohort_id, session_number, scheduled_at, status, closed_at, is_extra)
+  VALUES (v_sess4_id, v_cohort_id, 4, (v_today - 5)::timestamp with time zone, 'closed', (v_today - 5)::timestamp with time zone, false);
+
+  v_sess_extra_id := gen_random_uuid();
+  INSERT INTO public.sessions (id, cohort_id, session_number, scheduled_at, status, closed_at, is_extra)
+  VALUES (v_sess_extra_id, v_cohort_id, 5, (v_today - 2)::timestamp with time zone, 'closed', (v_today - 2)::timestamp with time zone, true);
+
+  v_sess_sched_id := gen_random_uuid();
+  INSERT INTO public.sessions (id, cohort_id, session_number, scheduled_at, status, is_extra)
+  VALUES (v_sess_sched_id, v_cohort_id, 6, (v_today + 1)::timestamp with time zone, 'scheduled', false);
+
+  -- Sessions for Cohort 2:
+  v_sess_c2_1 := gen_random_uuid();
+  INSERT INTO public.sessions (id, cohort_id, session_number, scheduled_at, status, closed_at, is_extra)
+  VALUES (v_sess_c2_1, v_cohort2_id, 1, (v_today - 15)::timestamp with time zone, 'closed', (v_today - 15)::timestamp with time zone, false);
+
+  v_sess_c2_2 := gen_random_uuid();
+  INSERT INTO public.sessions (id, cohort_id, session_number, scheduled_at, status, closed_at, is_extra)
+  VALUES (v_sess_c2_2, v_cohort2_id, 2, (v_today - 10)::timestamp with time zone, 'closed', (v_today - 10)::timestamp with time zone, false);
+
+  -- Sessions for Cohort 3 (has unclosed scheduled session):
+  v_sess_c3_1 := gen_random_uuid();
+  INSERT INTO public.sessions (id, cohort_id, session_number, scheduled_at, status, is_extra)
+  VALUES (v_sess_c3_1, v_cohort3_id, 1, (v_today + 2)::timestamp with time zone, 'scheduled', false);
+
+  -- --------------------------------------------------------------------------
+  -- 3. Enrollments & Financial Transactions
+  -- --------------------------------------------------------------------------
+
+  -- Enrollment 1: Regular (Joined day -30; Total due = 100k, Discount = 0)
+  v_enr1_id := gen_random_uuid();
+  INSERT INTO public.enrollments (id, cohort_id, trainee_id, enrolled_at, created_by, status, lifecycle_status, total_due, discount_amount, currency)
+  VALUES (v_enr1_id, v_cohort_id, v_trainee1_id, (v_today - 30)::timestamp with time zone, v_admin_id, 'unpaid', 'active', 100000.00, 0.00, 'SYP');
+
+  -- Payments for Enrollment 1:
+  -- Old payment: 25 days ago (40k)
+  v_old_pay_id := gen_random_uuid();
+  INSERT INTO public.payments (id, enrollment_id, amount, currency, paid_at, performed_by, method)
+  VALUES (v_old_pay_id, v_enr1_id, 40000.00, 'SYP', (v_today - 25)::timestamp with time zone, v_admin_id, 'cash');
+
+  -- Today payment: paid today (10k)
+  v_today_pay_id := gen_random_uuid();
+  INSERT INTO public.payments (id, enrollment_id, amount, currency, paid_at, performed_by, method)
+  VALUES (v_today_pay_id, v_enr1_id, 10000.00, 'SYP', now(), v_admin_id, 'cash');
+
+  -- Independent Refund of old payment created TODAY (10k)
+  INSERT INTO public.payment_refunds (id, payment_id, amount, reason, created_at, created_by)
+  VALUES (gen_random_uuid(), v_old_pay_id, 10000.00, 'C5 period refund test', now(), v_admin_id);
+
+  -- Enrollment 2: Joined late (day -15), prior sessions = 2, delivered sessions = 2
+  v_enr2_id := gen_random_uuid();
+  INSERT INTO public.enrollments (id, cohort_id, trainee_id, enrolled_at, created_by, status, lifecycle_status, total_due, discount_amount, currency)
+  VALUES (v_enr2_id, v_cohort_id, v_trainee2_id, (v_today - 15)::timestamp with time zone, v_admin_id, 'unpaid', 'active', 100000.00, 0.00, 'SYP');
+
+  -- Enrollment 3: Historical Withdrawal (Settled at due_amount = 20k, net_due_before = 100k, fee adj = -80k)
+  v_enr3_id := gen_random_uuid();
+  INSERT INTO public.enrollments (id, cohort_id, trainee_id, enrolled_at, created_by, status, lifecycle_status, total_due, discount_amount, currency, withdrawn_at, withdrawal_reason)
+  VALUES (v_enr3_id, v_cohort_id, v_trainee3_id, (v_today - 30)::timestamp with time zone, v_admin_id, 'unpaid', 'withdrawn', 100000.00, 0.00, 'SYP', (v_today - 8)::timestamp with time zone, 'C5 withdrawal test');
+
+  INSERT INTO public.fee_adjustments (id, enrollment_id, kind, amount, reason, created_by, adjusted_at)
+  VALUES (gen_random_uuid(), v_enr3_id, 'withdrawal_settlement', -80000.00, 'withdrawal_settlement', v_admin_id, (v_today - 8)::timestamp with time zone);
+
+  INSERT INTO public.enrollment_withdrawals (
+    id, enrollment_id, trainee_id, currency, total_sessions, sessions_charged,
+    session_cost, net_due_before, net_due_after, net_paid_before, net_paid_after,
+    due_amount, outcome, reason, withdrawn_at, created_by
+  )
+  VALUES (
+    gen_random_uuid(), v_enr3_id, v_trainee3_id, 'SYP', 4, 1,
+    25000.00, 100000.00, 20000.00, 0.00, 0.00,
+    20000.00, 'settled', 'C5 withdrawal test', (v_today - 8)::timestamp with time zone, v_admin_id
+  );
+
+  -- Enrollment 4: Referral discount + future withdrawal simulation
+  v_enr4_id := gen_random_uuid();
+  INSERT INTO public.enrollments (id, cohort_id, trainee_id, enrolled_at, created_by, status, lifecycle_status, total_due, discount_amount, referral_discount_amount, currency)
+  VALUES (v_enr4_id, v_cohort_id, v_trainee4_id, (v_today - 30)::timestamp with time zone, v_admin_id, 'unpaid', 'active', 100000.00, 10000.00, 0.00, 'SYP');
+
+  -- Emulate referral application (SET discount_amount = 20k, referral_discount_amount = 10k)
+  UPDATE public.enrollments
+  SET discount_amount = 20000.00, referral_discount_amount = 10000.00
+  WHERE id = v_enr4_id;
+
+  -- Add future withdrawal timestamp (tomorrow)
+  INSERT INTO public.enrollment_withdrawals (
+    id, enrollment_id, trainee_id, currency, total_sessions, sessions_charged,
+    session_cost, net_due_before, net_due_after, net_paid_before, net_paid_after,
+    due_amount, outcome, reason, withdrawn_at, created_by
+  )
+  VALUES (
+    gen_random_uuid(), v_enr4_id, v_trainee4_id, 'SYP', 4, 1,
+    25000.00, 80000.00, 30000.00, 0.00, 0.00,
+    30000.00, 'settled', 'Future withdrawal snapshot test', (v_today + 1)::timestamp with time zone, v_admin_id
+  );
+
+  -- Enrollment 5: Cohort 2 for Completed cutoff test
+  v_enr5_id := gen_random_uuid();
+  INSERT INTO public.enrollments (id, cohort_id, trainee_id, enrolled_at, created_by, status, lifecycle_status, total_due, discount_amount, currency)
+  VALUES (v_enr5_id, v_cohort2_id, v_trainee5_id, (v_today - 20)::timestamp with time zone, v_admin_id, 'unpaid', 'active', 100000.00, 0.00, 'SYP');
+
+  -- Enrollment 6: Cohort 3 for Force completion test
+  v_enr6_id := gen_random_uuid();
+  INSERT INTO public.enrollments (id, cohort_id, trainee_id, enrolled_at, created_by, status, lifecycle_status, total_due, discount_amount, currency)
+  VALUES (v_enr6_id, v_cohort3_id, v_trainee6_id, (v_today - 5)::timestamp with time zone, v_admin_id, 'unpaid', 'active', 100000.00, 0.00, 'SYP');
+
+  -- --------------------------------------------------------------------------
+  -- 4. Execute Acceptance Tests & Assert Invariants
+  -- --------------------------------------------------------------------------
+
+  -- --------------------------------------------------------------------------
+  -- Test 1: Session counting uses FILTER, eliminating Cartesian products
+  -- --------------------------------------------------------------------------
+  SELECT * INTO v_rec
+  FROM public.get_accrual_revenue_report(v_today)
+  WHERE enrollment_id = v_enr2_id;
+
+  ASSERT v_rec.sessions_prior = 2,
+    format('Test 1 Failed: Expected sessions_prior = 2, got %s', v_rec.sessions_prior);
+  ASSERT v_rec.delivered_since_enrolled = 2,
+    format('Test 1 Failed: Expected delivered_since_enrolled = 2, got %s', v_rec.delivered_since_enrolled);
+  ASSERT v_rec.total_course_sessions = 10,
+    format('Test 1 Failed: Expected total_course_sessions = 10, got %s', v_rec.total_course_sessions);
+
+  RAISE NOTICE '[Test 1] PASS - Session counting uses FILTER, eliminating Cartesian products (prior=%, delivered=%, total=%)',
+    v_rec.sessions_prior, v_rec.delivered_since_enrolled, v_rec.total_course_sessions;
+
+  -- --------------------------------------------------------------------------
+  -- Test 2: True temporal As-Of isolation: today payment is absent from yesterday report
+  -- --------------------------------------------------------------------------
+  SELECT * INTO v_rec
+  FROM public.get_accrual_revenue_report(v_yesterday)
+  WHERE enrollment_id = v_enr1_id;
+
+  ASSERT v_rec.net_paid = 40000.00,
+    format('Test 2 Failed: Yesterday net_paid must be 40,000, got %s', v_rec.net_paid);
+
+  SELECT * INTO v_rec
+  FROM public.get_accrual_revenue_report(v_today)
+  WHERE enrollment_id = v_enr1_id;
+
+  ASSERT v_rec.net_paid = 40000.00,
+    format('Test 2 Failed: Today net_paid must be 40,000 (40k + 10k - 10k refund), got %s', v_rec.net_paid);
+
+  RAISE NOTICE '[Test 2] PASS - True temporal As-Of isolation: today payment is absent from yesterday report (yesterday=40k, today=40k)';
+
+  -- --------------------------------------------------------------------------
+  -- Test 3: Referral discount is not double-deducted
+  -- --------------------------------------------------------------------------
+  SELECT * INTO v_rec
+  FROM public.get_accrual_revenue_report(v_today)
+  WHERE enrollment_id = v_enr4_id;
+
+  ASSERT v_rec.net_due = 80000.00,
+    format('Test 3 Failed: Net due must be 80,000 (100k - 20k), got %s', v_rec.net_due);
+  ASSERT v_rec.earned_revenue = 32000.00,
+    format('Test 3 Failed: Earned revenue for 4 sessions must be 32,000, got %s', v_rec.earned_revenue);
+
+  RAISE NOTICE '[Test 3] PASS - Referral discount is not double-deducted (net_due=80k, earned=32k)';
+
+  -- --------------------------------------------------------------------------
+  -- Test 4: As-Of prior to future withdrawal recovers net_due_before and remains active
+  -- --------------------------------------------------------------------------
+  SELECT * INTO v_rec
+  FROM public.get_accrual_revenue_report(v_today)
+  WHERE enrollment_id = v_enr4_id;
+
+  ASSERT v_rec.net_due = 80000.00,
+    format('Test 4 Failed: Expected net_due = 80,000 (recovered net_due_before), got %s', v_rec.net_due);
+  ASSERT v_rec.lifecycle_status = 'active',
+    format('Test 4 Failed: Expected active status before withdrawal date, got %s', v_rec.lifecycle_status);
+  ASSERT v_rec.completion_ratio = 0.40,
+    format('Test 4 Failed: Expected completion_ratio 0.40 (4/10 sessions), got %s', v_rec.completion_ratio);
+
+  RAISE NOTICE '[Test 4] PASS - As-Of prior to future withdrawal recovers net_due_before (80k) and remains active (ratio=0.40)';
+
+  -- --------------------------------------------------------------------------
+  -- Test 5: Completed timestamp cutoff: yesterday is active (0.2), today is completed (1.0)
+  -- --------------------------------------------------------------------------
+  -- Step A: Yesterday report before completion
+  SELECT * INTO v_rec
+  FROM public.get_accrual_revenue_report(v_yesterday)
+  WHERE enrollment_id = v_enr5_id;
+
+  ASSERT v_rec.lifecycle_status = 'active',
+    format('Test 5 Failed: Expected active status on yesterday report, got %s', v_rec.lifecycle_status);
+  ASSERT v_rec.completion_ratio = 0.20,
+    format('Test 5 Failed: Expected 0.20 ratio on yesterday report (2/10 sessions), got %s', v_rec.completion_ratio);
+  ASSERT v_rec.earned_revenue = 20000.00,
+    format('Test 5 Failed: Expected 20,000 earned on yesterday report, got %s', v_rec.earned_revenue);
+
+  -- Step B: Complete Cohort 2 today
+  v_res := public.complete_cohort(v_cohort2_id, false);
+  ASSERT (v_res->>'status') = 'completed',
+    format('complete_cohort failed, expected status=completed: %s', v_res);
+
+  -- Step C: Today report after completion
+  SELECT * INTO v_rec
+  FROM public.get_accrual_revenue_report(v_today)
+  WHERE enrollment_id = v_enr5_id;
+
+  ASSERT v_rec.lifecycle_status = 'completed',
+    format('Test 5 Failed: Expected completed status on today report, got %s', v_rec.lifecycle_status);
+  ASSERT v_rec.completion_ratio = 1.00,
+    format('Test 5 Failed: Expected 1.00 ratio on today report, got %s', v_rec.completion_ratio);
+  ASSERT v_rec.earned_revenue = 100000.00,
+    format('Test 5 Failed: Expected 100,000 earned on today report, got %s', v_rec.earned_revenue);
+
+  RAISE NOTICE '[Test 5] PASS - Completed timestamp cutoff: yesterday is active (0.20, 20k), today is completed (1.00, 100k)';
+
+  -- --------------------------------------------------------------------------
+  -- Test 6: Withdrawn enrollment yields ratio 1.0 and earned = due_amount without double pro-rata
+  -- --------------------------------------------------------------------------
+  SELECT * INTO v_rec
+  FROM public.get_accrual_revenue_report(v_today)
+  WHERE enrollment_id = v_enr3_id;
+
+  ASSERT v_rec.lifecycle_status = 'withdrawn',
+    format('Test 6 Failed: Expected withdrawn status, got %s', v_rec.lifecycle_status);
+  ASSERT v_rec.completion_ratio = 1.00,
+    format('Test 6 Failed: Expected ratio 1.0 for settled withdrawal, got %s', v_rec.completion_ratio);
+  ASSERT v_rec.net_due = 20000.00,
+    format('Test 6 Failed: Expected net_due = 20,000, got %s', v_rec.net_due);
+  ASSERT v_rec.earned_revenue = 20000.00,
+    format('Test 6 Failed: Expected earned_revenue = 20,000, got %s', v_rec.earned_revenue);
+  ASSERT v_rec.unearned_revenue = 0.00,
+    format('Test 6 Failed: Expected unearned_revenue = 0.00, got %s', v_rec.unearned_revenue);
+
+  RAISE NOTICE '[Test 6] PASS - Withdrawn enrollment yields ratio 1.0 and earned = due_amount (20k) without double pro-rata';
+
+  -- --------------------------------------------------------------------------
+  -- Test 7: Extra sessions (is_extra = true) are excluded from delivery counting
+  -- --------------------------------------------------------------------------
+  SELECT * INTO v_rec
+  FROM public.get_accrual_revenue_report(v_today)
+  WHERE enrollment_id = v_enr1_id;
+
+  ASSERT v_rec.delivered_since_enrolled = 4,
+    format('Test 7 Failed: Extra session must not be counted in delivered, expected 4, got %s', v_rec.delivered_since_enrolled);
+  ASSERT v_rec.completion_ratio = 0.40,
+    format('Test 7 Failed: Expected completion_ratio = 0.40, got %s', v_rec.completion_ratio);
+
+  RAISE NOTICE '[Test 7] PASS - Extra sessions (is_extra = true) are excluded from delivery counting (delivered=4, ratio=0.40)';
+
+  -- --------------------------------------------------------------------------
+  -- Test 8: complete_cohort blocks on future sessions even if is_active=false, succeeds with p_force
+  -- --------------------------------------------------------------------------
+  UPDATE public.cohorts SET is_active = false WHERE id = v_cohort_id;
+
+  v_caught := false;
+  BEGIN
+    PERFORM public.complete_cohort(v_cohort_id, false);
+  EXCEPTION
+    WHEN SQLSTATE 'P0004' THEN
+      GET STACKED DIAGNOSTICS v_state = RETURNED_SQLSTATE, v_msg = MESSAGE_TEXT;
+      v_caught := true;
+  END;
+
+  ASSERT v_caught = true AND v_state = 'P0004',
+    format('Test 8 Failed: Expected P0004 guard failure on unclosed session in cohort 1, got SQLSTATE=%s, msg=%s', v_state, v_msg);
+
+  -- Safe retry without force on inactive cohort with 0 active enrollments returns already_completed
+  PERFORM set_config('c1.withdrawal_rpc', 'on', true);
+  UPDATE public.enrollments SET lifecycle_status = 'completed', completed_at = now() WHERE cohort_id = v_cohort_id AND lifecycle_status = 'active';
+  PERFORM set_config('c1.withdrawal_rpc', 'off', true);
+  v_res := public.complete_cohort(v_cohort_id, false);
+  ASSERT (v_res->>'status') = 'already_completed',
+    format('Test 8 Safe retry failed: expected already_completed, got %s', v_res);
+
+  -- Cohort 3: Active cohort with active enrollment and unclosed session:
+  -- 1) Calling complete_cohort without force MUST fail with P0004
+  v_caught := false;
+  BEGIN
+    PERFORM public.complete_cohort(v_cohort3_id, false);
+  EXCEPTION
+    WHEN SQLSTATE 'P0004' THEN
+      GET STACKED DIAGNOSTICS v_state = RETURNED_SQLSTATE, v_msg = MESSAGE_TEXT;
+      v_caught := true;
+  END;
+
+  ASSERT v_caught = true AND v_state = 'P0004',
+    format('Test 8 Failed: Expected P0004 guard failure on cohort 3 unclosed session, got SQLSTATE=%s, msg=%s', v_state, v_msg);
+
+  -- 2) Calling with p_force = true overrides unclosed sessions and marks active enrollments completed
+  v_res := public.complete_cohort(v_cohort3_id, true);
+  ASSERT (v_res->>'status') = 'completed',
+    format('Test 8 Force completion failed: expected status=completed, got %s', v_res);
+  ASSERT (v_res->>'closed_enrollments')::int = 1,
+    format('Test 8 Force completion failed: expected closed_enrollments=1, got %s', v_res);
+  ASSERT (v_res->>'is_active')::boolean = false,
+    format('Test 8 Force completion failed: expected is_active=false, got %s', v_res);
+
+  RAISE NOTICE '[Test 8] PASS - complete_cohort: blocks with P0004 without force, returns already_completed safely, and overrides unclosed sessions with p_force (status=completed, closed=1)';
+
+  -- --------------------------------------------------------------------------
+  -- Test 9: Universal independent bounds: 0 <= earned <= net_due, 0 <= ratio <= 1
+  -- --------------------------------------------------------------------------
+  SELECT count(*) INTO v_bad_bounds
+  FROM public.get_accrual_revenue_report(v_today)
+  WHERE completion_ratio < 0.00
+     OR completion_ratio > 1.00
+     OR earned_revenue < 0.00
+     OR earned_revenue > (net_due + 0.01)
+     OR unearned_revenue < -0.01;
+
+  ASSERT v_bad_bounds = 0, 'Universal bounds must hold for all enrollments in report';
+
+  RAISE NOTICE '[Test 9] PASS - Universal independent bounds: 0 <= earned <= net_due, 0 <= ratio <= 1 (0 violations)';
+
+  -- --------------------------------------------------------------------------
+  -- Test 10: Universal balance identity: earned + unearned - accrued = net_paid
+  -- --------------------------------------------------------------------------
+  SELECT count(*) INTO v_bad_accrual
+  FROM public.get_accrual_revenue_report(v_today)
+  WHERE abs((earned_revenue + unearned_revenue - accrued_receivables) - net_paid) > 0.02;
+
+  ASSERT v_bad_accrual = 0, 'Universal balance identity must hold: earned + unearned - accrued = net_paid';
+
+  RAISE NOTICE '[Test 10] PASS - Universal balance identity: earned + unearned - accrued = net_paid holds identically for all enrollments (0 violations)';
+
+  -- --------------------------------------------------------------------------
+  -- Test 11: Period reconciliation bridge balances with cash movements across past/present periods
+  -- --------------------------------------------------------------------------
+  SELECT * INTO v_rec
+  FROM public.get_accrual_reconciliation(v_from, v_to)
+  WHERE currency = 'SYP';
+
+  ASSERT v_rec.is_reconciled = true, 'Period reconciliation must be balanced (is_reconciled = true)';
+  ASSERT abs(v_rec.reconciliation_diff) < 0.01, 'Reconciliation diff must be 0.00';
+  ASSERT v_rec.period_cash_refunds >= 10000.00, 'Independent refund of old payment must be captured in period';
+
+  RAISE NOTICE '[Test 11] PASS - Period reconciliation bridge: is_reconciled=true, diff=%, period_cash_refunds=%',
+    v_rec.reconciliation_diff, v_rec.period_cash_refunds;
+
+  -- --------------------------------------------------------------------------
+  -- Test 12: Reception and Anonymous roles are denied access across all three functions with exact SQLSTATE
+  -- --------------------------------------------------------------------------
+  PERFORM set_config('request.jwt.claim.sub', v_reception_id::text, true);
+  PERFORM set_config('request.jwt.claims', json_build_object(
+    'sub', v_reception_id,
+    'role', 'authenticated',
+    'user_metadata', json_build_object('role', 'reception')
+  )::text, true);
+
+  v_caught := false;
+  BEGIN
+    PERFORM public.complete_cohort(v_cohort_id, true);
+  EXCEPTION WHEN OTHERS THEN
+    GET STACKED DIAGNOSTICS v_state = RETURNED_SQLSTATE, v_msg = MESSAGE_TEXT;
+    v_caught := true;
+  END;
+  ASSERT v_caught = true AND v_state = 'P0001' AND v_msg LIKE '%غير مصرّح%',
+    format('Reception complete_cohort must fail with P0001 and unauthorized msg, got state=%s, msg=%s', v_state, v_msg);
+
+  v_caught := false;
+  BEGIN
+    PERFORM public.get_accrual_revenue_report(v_today);
+  EXCEPTION WHEN OTHERS THEN
+    GET STACKED DIAGNOSTICS v_state = RETURNED_SQLSTATE, v_msg = MESSAGE_TEXT;
+    v_caught := true;
+  END;
+  ASSERT v_caught = true AND v_state = 'P0001' AND v_msg LIKE '%غير مصرّح%',
+    format('Reception get_accrual_revenue_report must fail with P0001 and unauthorized msg, got state=%s, msg=%s', v_state, v_msg);
+
+  v_caught := false;
+  BEGIN
+    PERFORM public.get_accrual_reconciliation(v_from, v_to);
+  EXCEPTION WHEN OTHERS THEN
+    GET STACKED DIAGNOSTICS v_state = RETURNED_SQLSTATE, v_msg = MESSAGE_TEXT;
+    v_caught := true;
+  END;
+  ASSERT v_caught = true AND v_state = 'P0001' AND v_msg LIKE '%غير مصرّح%',
+    format('Reception get_accrual_reconciliation must fail with P0001 and unauthorized msg, got state=%s, msg=%s', v_state, v_msg);
+
+  RESET ROLE;
+
+  -- Check Anonymous -> 42501 (grant level permission denied)
+  SET LOCAL ROLE anon;
+
+  v_caught := false;
+  BEGIN
+    PERFORM public.complete_cohort(v_cohort_id, true);
+  EXCEPTION WHEN OTHERS THEN
+    GET STACKED DIAGNOSTICS v_state = RETURNED_SQLSTATE, v_msg = MESSAGE_TEXT;
+    v_caught := true;
+  END;
+  ASSERT v_caught = true AND v_state = '42501',
+    format('Anon complete_cohort must fail with 42501, got state=%s, msg=%s', v_state, v_msg);
+
+  v_caught := false;
+  BEGIN
+    PERFORM public.get_accrual_revenue_report(v_today);
+  EXCEPTION WHEN OTHERS THEN
+    GET STACKED DIAGNOSTICS v_state = RETURNED_SQLSTATE, v_msg = MESSAGE_TEXT;
+    v_caught := true;
+  END;
+  ASSERT v_caught = true AND v_state = '42501',
+    format('Anon get_accrual_revenue_report must fail with 42501, got state=%s, msg=%s', v_state, v_msg);
+
+  v_caught := false;
+  BEGIN
+    PERFORM public.get_accrual_reconciliation(v_from, v_to);
+  EXCEPTION WHEN OTHERS THEN
+    GET STACKED DIAGNOSTICS v_state = RETURNED_SQLSTATE, v_msg = MESSAGE_TEXT;
+    v_caught := true;
+  END;
+  ASSERT v_caught = true AND v_state = '42501',
+    format('Anon get_accrual_reconciliation must fail with 42501, got state=%s, msg=%s', v_state, v_msg);
+
+  RESET ROLE;
+
+  -- Restore Admin claims for sample extraction
+  PERFORM set_config('request.jwt.claim.sub', v_admin_id::text, true);
+  PERFORM set_config('request.jwt.claims', json_build_object(
+    'sub', v_admin_id,
+    'role', 'authenticated',
+    'user_metadata', json_build_object('role', 'admin')
+  )::text, true);
+
+  RAISE NOTICE '[Test 12] PASS - RBAC denial with exact SQLSTATE: Reception (P0001: %); Anon (42501)', v_msg;
+
+  -- Sample output JSON for inspection
+  SELECT to_jsonb(r) INTO v_sample_json
+  FROM public.get_accrual_revenue_report(v_today) r
+  WHERE enrollment_id = v_enr2_id;
+
+  RAISE NOTICE '============================================================';
+  RAISE NOTICE 'Sample Accrual Revenue JSON Row (enrollment_id = %):', v_enr2_id;
+  RAISE NOTICE '%', v_sample_json::text;
+  RAISE NOTICE '============================================================';
+  RAISE NOTICE '=== ALL 12 PHASE C5 ACCEPTANCE TESTS PASSED (12/12) ===';
+END $$;
+psql:supabase/tests/20261123000002_phase_c5_acceptance_proof.sql:624: NOTICE:  === Starting Phase C5 Accrual Revenue Acceptance Proof ===
+psql:supabase/tests/20261123000002_phase_c5_acceptance_proof.sql:624: NOTICE:  Context: Database=postgres, User=postgres, DamascusDate=2026-11-24, Clock=2026-11-24 15:26:55.805253+00
+psql:supabase/tests/20261123000002_phase_c5_acceptance_proof.sql:624: NOTICE:  Contract Hashes: Migration_MD5=20e5bca96abbc0cf5112284147e12a3a
+psql:supabase/tests/20261123000002_phase_c5_acceptance_proof.sql:624: NOTICE:  Operational Rule: Do not run within 60s of Damascus midnight (23:59:00 - 00:01:00)
+psql:supabase/tests/20261123000002_phase_c5_acceptance_proof.sql:624: ERROR:  duplicate key value violates unique constraint "trainees_trainee_code_key"
+DETAIL:  Key (trainee_code)=(T10159) already exists.
+CONTEXT:  SQL statement "INSERT INTO public.trainees (id, full_name_ar, created_by) VALUES (v_trainee1_id, 'متدرب أول منتظم C5', v_admin_id)"
+PL/pgSQL function inline_code_block line 130 at SQL statement

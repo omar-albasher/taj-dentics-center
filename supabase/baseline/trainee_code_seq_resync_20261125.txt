@@ -1,0 +1,34 @@
+SELECT inet_server_addr() AS server_ip, current_database(), current_user, now() AT TIME ZONE 'Asia/Damascus' AS damascus_time;
+               server_ip                | current_database | current_user |       damascus_time        
+----------------------------------------+------------------+--------------+----------------------------
+ 2a05:d018:48a:c902:2d02:8d28:a30f:5129 | postgres         | postgres     | 2026-11-25 00:04:19.520662
+(1 row)
+
+SELECT last_value, is_called FROM public.trainee_code_seq;
+ last_value | is_called 
+------------+-----------
+      10159 | t
+(1 row)
+
+SELECT trainee_code FROM public.trainees WHERE btrim(trainee_code) ~ '^T[0-9]+$' ORDER BY substring(btrim(trainee_code) from 2)::int DESC LIMIT 5;
+ trainee_code 
+--------------
+ T10205
+ T10204
+ T10203
+ T10202
+ T10201
+(5 rows)
+
+SELECT setval('public.trainee_code_seq', (SELECT max(substring(btrim(trainee_code) from 2)::int) FROM public.trainees WHERE btrim(trainee_code) ~ '^T[0-9]+$'), true) AS new_last_value;
+ new_last_value 
+----------------
+          10205
+(1 row)
+
+SELECT last_value, is_called FROM public.trainee_code_seq;
+ last_value | is_called 
+------------+-----------
+      10205 | t
+(1 row)
+
