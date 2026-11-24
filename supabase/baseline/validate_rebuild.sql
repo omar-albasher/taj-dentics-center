@@ -105,10 +105,10 @@ BEGIN
   RETURN QUERY VALUES
     ('C01', 'Tables in public', '43', v_tables::text, CASE WHEN v_tables = 43 THEN 'PASS' ELSE 'FAIL' END),
     ('C02', 'Views in public', '33', v_views::text, CASE WHEN v_views = 33 THEN 'PASS' ELSE 'FAIL' END),
-    ('C03', 'Functions in public', '111', v_functions::text, CASE WHEN v_functions = 111 THEN 'PASS' ELSE 'FAIL' END),
+    ('C03', 'Functions in public', '114', v_functions::text, CASE WHEN v_functions = 114 THEN 'PASS' ELSE 'FAIL' END),
     ('C04', 'Policies in public', '71', v_policies::text, CASE WHEN v_policies = 71 THEN 'PASS' ELSE 'FAIL' END),
     ('C05', 'Triggers in public', '68', v_triggers::text, CASE WHEN v_triggers = 68 THEN 'PASS' ELSE 'FAIL' END),
-    ('C06', 'Indexes in public', '130', v_indexes::text, CASE WHEN v_indexes = 130 THEN 'PASS' ELSE 'FAIL' END),
+    ('C06', 'Indexes in public', '131', v_indexes::text, CASE WHEN v_indexes = 131 THEN 'PASS' ELSE 'FAIL' END),
     ('C07', 'Sequences in public', '3', v_sequences::text, CASE WHEN v_sequences = 3 THEN 'PASS' ELSE 'FAIL' END),
     ('C08', 'Enums in public', '9', v_enums::text, CASE WHEN v_enums = 9 THEN 'PASS' ELSE 'FAIL' END),
     ('C09', 'RLS Enabled Tables', '43', v_rls_enabled::text, CASE WHEN v_rls_enabled = 43 THEN 'PASS' ELSE 'FAIL' END),

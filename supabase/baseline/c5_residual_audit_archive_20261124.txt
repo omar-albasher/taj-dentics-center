@@ -1,0 +1,114 @@
+================================================================================
+Phase C5 Residual Audit Log Raw Archive (Secondary DB: pjtgwaxdjtvdzvoazkxv)
+Timestamp: 2026-11-24 02:02:24.988982 Asia/Damascus
+Session: db_name=postgres, session_user=postgres
+Total Rows: 6
+================================================================================
+
+[Row 1]
+id: 1269
+performed_at: 2026-11-23 14:39:49.847895+00
+performed_by: null
+actor_email: null
+actor_role: null
+actor_name: null
+table_name: users
+operation: INSERT
+record_id: a9d5ca85-cfa3-4943-af06-43633d15a55e
+actor_source: system
+logged_role: null
+old_data: null
+new_data: {"id":"a9d5ca85-cfa3-4943-af06-43633d15a55e","role":"admin","email":"c5_admin_a9d5ca85@example.com","phone":null,"full_name":"C5 Admin Test","is_active":true,"created_at":"2026-11-23T14:39:49.847895+00:00","created_by":null,"must_change_password":false,"must_change_password_at":null}
+
+[Row 2]
+id: 1270
+performed_at: 2026-11-23 14:39:49.847895+00
+performed_by: null
+actor_email: null
+actor_role: null
+actor_name: null
+table_name: users
+operation: INSERT
+record_id: 3fe8a544-3501-4cfa-9bab-0a3b6fc47a2f
+actor_source: system
+logged_role: null
+old_data: null
+new_data: {"id":"3fe8a544-3501-4cfa-9bab-0a3b6fc47a2f","role":"reception","email":"c5_rec_3fe8a544@example.com","phone":null,"full_name":"C5 Reception Test","is_active":true,"created_at":"2026-11-23T14:39:49.847895+00:00","created_by":null,"must_change_password":false,"must_change_password_at":null}
+
+[Row 3]
+id: 1358
+performed_at: 2026-11-23 14:39:49.847895+00
+performed_by: null
+actor_email: null
+actor_role: null
+actor_name: null
+table_name: users
+operation: DELETE
+record_id: a9d5ca85-cfa3-4943-af06-43633d15a55e
+actor_source: system
+logged_role: null
+old_data: {"id":"a9d5ca85-cfa3-4943-af06-43633d15a55e","role":"admin","email":"c5_admin_a9d5ca85@example.com","phone":null,"full_name":"C5 Admin Test","is_active":true,"created_at":"2026-11-23T14:39:49.847895+00:00","created_by":null,"must_change_password":false,"must_change_password_at":null}
+new_data: null
+
+[Row 4]
+id: 1359
+performed_at: 2026-11-23 14:39:49.847895+00
+performed_by: null
+actor_email: null
+actor_role: null
+actor_name: null
+table_name: users
+operation: DELETE
+record_id: 3fe8a544-3501-4cfa-9bab-0a3b6fc47a2f
+actor_source: system
+logged_role: null
+old_data: {"id":"3fe8a544-3501-4cfa-9bab-0a3b6fc47a2f","role":"reception","email":"c5_rec_3fe8a544@example.com","phone":null,"full_name":"C5 Reception Test","is_active":true,"created_at":"2026-11-23T14:39:49.847895+00:00","created_by":null,"must_change_password":false,"must_change_password_at":null}
+new_data: null
+
+[Row 5]
+id: 1627
+performed_at: 2026-11-23 14:57:22.648191+00
+performed_by: null
+actor_email: null
+actor_role: null
+actor_name: null
+table_name: users
+operation: DELETE
+record_id: 6e7c33dd-65c6-4bd3-832c-0a8a9e8c7d2f
+actor_source: system
+logged_role: null
+old_data: {"id":"6e7c33dd-65c6-4bd3-832c-0a8a9e8c7d2f","role":"admin","email":"c5_admin_6e7c33dd@example.com","phone":null,"full_name":"C5 Admin Test","is_active":true,"created_at":"2026-11-23T14:57:22.648191+00:00","created_by":null,"must_change_password":false,"must_change_password_at":null}
+new_data: null
+
+[Row 6]
+id: 1628
+performed_at: 2026-11-23 14:57:22.648191+00
+performed_by: null
+actor_email: null
+actor_role: null
+actor_name: null
+table_name: users
+operation: DELETE
+record_id: 8d3cbe73-6efd-4220-9c89-da525f0137f3
+actor_source: system
+logged_role: null
+old_data: {"id":"8d3cbe73-6efd-4220-9c89-da525f0137f3","role":"reception","email":"c5_rec_8d3cbe73@example.com","phone":null,"full_name":"C5 Reception Test","is_active":true,"created_at":"2026-11-23T14:57:22.648191+00:00","created_by":null,"must_change_password":false,"must_change_password_at":null}
+new_data: null
+
+================================================================================
+Residual Summary Audit Count:
+users: 0
+auth_users: 0
+courses: 0
+cohorts: 0
+trainees: 0
+enrollments: 0
+payments: 0
+audit_c5_ids: 6
+
+Deletion Verification (Executed 2026-11-24 02:04:51 Asia/Damascus):
+DELETE FROM public.audit_log WHERE id IN (1269, 1270, 1358, 1359, 1627, 1628) AND performed_by IS NULL;
+Verification Query:
+SELECT count(*) AS residual_c5_audit_logs FROM public.audit_log WHERE id IN (1269, 1270, 1358, 1359, 1627, 1628);
+Result: 0 (CONFIRMED CLEAN)
+================================================================================

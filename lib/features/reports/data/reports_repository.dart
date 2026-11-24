@@ -1,9 +1,59 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../domain/accrual_models.dart';
 import '../domain/financial_statement_models.dart';
 
 class ReportsRepository {
   final _client = Supabase.instance.client;
+
+  String _formatDate(DateTime date) {
+    final y = date.year.toString().padLeft(4, '0');
+    final m = date.month.toString().padLeft(2, '0');
+    final d = date.day.toString().padLeft(2, '0');
+    return '$y-$m-$d';
+  }
+
+  // ─── Phase C5 Accrual Revenue Recognition & Reconciliation Bridge ───
+  Future<List<AccrualRevenueReportRow>> getAccrualRevenueReport(DateTime asOf) async {
+    final response = await _client.rpc(
+      'get_accrual_revenue_report',
+      params: {
+        'p_as_of': _formatDate(asOf),
+      },
+    );
+    final rows = List<Map<String, dynamic>>.from(response as List);
+    return rows.map(AccrualRevenueReportRow.fromMap).toList();
+  }
+
+  Future<List<AccrualReconciliationReportRow>> getAccrualReconciliation(
+    DateTime from,
+    DateTime to,
+  ) async {
+    final response = await _client.rpc(
+      'get_accrual_reconciliation',
+      params: {
+        'p_from': _formatDate(from),
+        'p_to': _formatDate(to),
+      },
+    );
+    final rows = List<Map<String, dynamic>>.from(response as List);
+    return rows.map(AccrualReconciliationReportRow.fromMap).toList();
+  }
+
+  Future<CompleteCohortResult> completeCohort(
+    String cohortId, {
+    bool force = false,
+  }) async {
+    final response = await _client.rpc(
+      'complete_cohort',
+      params: {
+        'p_cohort_id': cohortId,
+        'p_force': force,
+      },
+    );
+    final map = Map<String, dynamic>.from(response as Map);
+    return CompleteCohortResult.fromMap(map);
+  }
 
   // ─── Phase C4 Financial Statements (v3 RPCs) ───
   Future<ProfitLossStatement> getProfitLoss(FinancialStatementPeriod period) async {
@@ -203,4 +253,52 @@ final c4CashFlowProvider = FutureProvider<CashFlowStatement>((ref) {
 final c4FinancialIntegrityProvider =
     FutureProvider<FinancialIntegrityReport>((ref) {
   return ref.watch(reportsRepositoryProvider).getFinancialIntegrity();
+});
+
+// ─── Phase C5 Providers ───
+class AccrualAsOfDateNotifier extends Notifier<DateTime> {
+  @override
+  DateTime build() => DateTime.now();
+
+  void setDate(DateTime date) {
+    state = date;
+  }
+}
+
+final accrualAsOfDateProvider =
+    NotifierProvider<AccrualAsOfDateNotifier, DateTime>(
+  AccrualAsOfDateNotifier.new,
+);
+
+final accrualRevenueReportProvider =
+    FutureProvider<List<AccrualRevenueReportRow>>((ref) {
+  final asOf = ref.watch(accrualAsOfDateProvider);
+  return ref.watch(reportsRepositoryProvider).getAccrualRevenueReport(asOf);
+});
+
+class AccrualReconciliationPeriodNotifier
+    extends Notifier<FinancialStatementPeriod> {
+  @override
+  FinancialStatementPeriod build() {
+    final now = DateTime.now();
+    final startOfMonth = DateTime(now.year, now.month, 1);
+    return FinancialStatementPeriod(from: startOfMonth, to: now);
+  }
+
+  void setPeriod(FinancialStatementPeriod period) {
+    state = period;
+  }
+}
+
+final accrualReconciliationPeriodProvider = NotifierProvider<
+    AccrualReconciliationPeriodNotifier, FinancialStatementPeriod>(
+  AccrualReconciliationPeriodNotifier.new,
+);
+
+final accrualReconciliationProvider =
+    FutureProvider<List<AccrualReconciliationReportRow>>((ref) {
+  final period = ref.watch(accrualReconciliationPeriodProvider);
+  return ref
+      .watch(reportsRepositoryProvider)
+      .getAccrualReconciliation(period.from, period.to);
 });

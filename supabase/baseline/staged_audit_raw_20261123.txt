@@ -1,0 +1,35 @@
+# Raw Staged Post-C5 Validator Output — Secondary Database
+# Project Ref: pjtgwaxdjtvdzvoazkxv
+# Timestamp: 2026-11-24 01:37:10 UTC+3 (Asia/Damascus)
+# Script: supabase/baseline/validate_rebuild.sql
+
+## Session Identity:
+| db_name  | session_user | damascus_time              |
+| -------- | ------------ | -------------------------- |
+| postgres | postgres     | 2026-11-24 01:37:10.775717 |
+
+## Staged Rebuild Validation (Post-C5 Target: 114 Functions, 131 Indexes):
+| check_id | metric                            | expected                         | actual                           | status |
+| -------- | --------------------------------- | -------------------------------- | -------------------------------- | ------ |
+| C01      | Tables in public                  | 43                               | 43                               | PASS   |
+| C02      | Views in public                   | 33                               | 33                               | PASS   |
+| C03      | Functions in public               | 114                              | 114                              | PASS   |
+| C04      | Policies in public                | 71                               | 71                               | PASS   |
+| C05      | Triggers in public                | 68                               | 68                               | PASS   |
+| C06      | Indexes in public                 | 131                              | 131                              | PASS   |
+| C07      | Sequences in public               | 3                                | 3                                | PASS   |
+| C08      | Enums in public                   | 9                                | 9                                | PASS   |
+| C09      | RLS Enabled Tables                | 43                               | 43                               | PASS   |
+| C10      | RLS Forced Tables                 | 0                                | 0                                | PASS   |
+| C11      | Unpinned SecDef Functions         | 0                                | 0                                | PASS   |
+| C12      | Policy MD5 Fingerprint            | c8215afa7997fb5258254047a879d68a | c8215afa7997fb5258254047a879d68a | PASS   |
+| C13      | Storage Bucket (course-materials) | true                             | true                             | PASS   |
+| C14      | Storage Policies on objects       | 2                                | 0                                | FAIL   |
+| C15      | Distinct Core Cron Jobs           | 5                                | 0                                | FAIL   |
+| C16      | Platform Extensions               | 6                                | 4                                | FAIL   |
+| C17      | Vault Push Scheduler Secrets      | 3                                | 0                                | FAIL   |
+
+## Residual Inventory Audit (Post-Acceptance):
+| residual_c5_courses | residual_c5_cohorts | residual_c5_trainees | residual_c5_users | residual_c5_auth_users | residual_c5_audit_logs |
+| ------------------- | ------------------- | -------------------- | ----------------- | ---------------------- | ---------------------- |
+| 0                   | 0                   | 0                    | 0                 | 0                      | 6                      |

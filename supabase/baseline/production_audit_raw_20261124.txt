@@ -1,0 +1,81 @@
+# Raw Production Database Validator Output (Post-C5 Certified)
+# Project Ref: nmczthzqbpkvweshitvv
+# Timestamp: 2026-11-24 17:18:52 Damascus Time (14:18:52 UTC)
+# Migration: supabase/migrations/20261123000001_phase_c5_accrual_revenue.sql
+# Script: supabase/baseline/validate_rebuild.sql
+
+## 1. Session Identity:
+| server_ip                              | current_database | current_user | damascus_time              |
+| -------------------------------------- | ---------------- | ------------ | -------------------------- |
+| 2a05:d018:48a:c902:2d02:8d28:a30f:5129 | postgres         | postgres     | 2026-11-24 17:17:05.812798 |
+
+## 2. Deep Structural Proof (JSON Output):
+```json
+{
+  "server_ip": "2a05:d018:48a:c902:2d02:8d28:a30f:5129/128",
+  "damascus_time": "2026-11-24 17:18:52.662153",
+  "completed_at_col": "completed_at",
+  "c5_index": "CREATE INDEX idx_sessions_cohort_status_closed ON public.sessions USING btree (cohort_id, status, closed_at) WHERE (is_extra = false)",
+  "c5_functions": [
+    {
+      "name": "complete_cohort",
+      "secdef": true,
+      "config": [
+        "search_path=public, pg_temp"
+      ]
+    },
+    {
+      "name": "get_accrual_reconciliation",
+      "secdef": true,
+      "config": [
+        "search_path=public, pg_temp"
+      ]
+    },
+    {
+      "name": "get_accrual_revenue_report",
+      "secdef": true,
+      "config": [
+        "search_path=public, pg_temp"
+      ]
+    }
+  ],
+  "anon_exec": false,
+  "auth_exec": true
+}
+```
+
+## 3. Pre-Migration Baseline (Historical Reference):
+| functions_count | indexes_count | source |
+| --------------- | ------------- | ------ |
+| 111             | 130           | Certified Post-C4 Baseline (production_audit_raw_20261122.txt) |
+
+Applied via Supabase Studio SQL Editor on 2026-11-24 prior to session validation.
+
+## 4. Rebuild Validator Output (17/17 PASS):
+| check_id | metric                            | expected                         | actual                           | status |
+| -------- | --------------------------------- | -------------------------------- | -------------------------------- | ------ |
+| C01      | Tables in public                  | 43                               | 43                               | PASS   |
+| C02      | Views in public                   | 33                               | 33                               | PASS   |
+| C03      | Functions in public               | 114                              | 114                              | PASS   |
+| C04      | Policies in public                | 71                               | 71                               | PASS   |
+| C05      | Triggers in public                | 68                               | 68                               | PASS   |
+| C06      | Indexes in public                 | 131                              | 131                              | PASS   |
+| C07      | Sequences in public               | 3                                | 3                                | PASS   |
+| C08      | Enums in public                   | 9                                | 9                                | PASS   |
+| C09      | RLS Enabled Tables                | 43                               | 43                               | PASS   |
+| C10      | RLS Forced Tables                 | 0                                | 0                                | PASS   |
+| C11      | Unpinned SecDef Functions         | 0                                | 0                                | PASS   |
+| C12      | Policy MD5 Fingerprint            | c8215afa7997fb5258254047a879d68a | c8215afa7997fb5258254047a879d68a | PASS   |
+| C13      | Storage Bucket (course-materials) | true                             | true                             | PASS   |
+| C14      | Storage Policies on objects       | 2                                | 2                                | PASS   |
+| C15      | Distinct Core Cron Jobs           | 5                                | 5                                | PASS   |
+| C16      | Platform Extensions               | 6                                | 6                                | PASS   |
+| C17      | Vault Push Scheduler Secrets      | 3                                | 3                                | PASS   |
+
+## 5. Isolation & Parity Confirmation:
+# Production has C17 = 3 (Vault secrets present), perfectly matching the canonical production platform.
+# Secondary testing project has C17 = 0, proving isolated cold-start rebuild.
+# Server IPv6 address 2a05:d018:48a:c902:2d02:8d28:a30f:5129 matches the Post-C4 certified production server.
+# Policy MD5 fingerprint is bit-identical across all environments: c8215afa7997fb5258254047a879d68a.
+# Functions verified at 114 (111 pre-C5 + 3 accrual RPCs: complete_cohort, get_accrual_revenue_report, get_accrual_reconciliation).
+# Indexes verified at 131 (130 pre-C5 + 1 C5 partial index: idx_sessions_cohort_status_closed).
