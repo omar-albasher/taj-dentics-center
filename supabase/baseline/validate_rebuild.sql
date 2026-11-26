@@ -105,7 +105,7 @@ BEGIN
   RETURN QUERY VALUES
     ('C01', 'Tables in public', '43', v_tables::text, CASE WHEN v_tables = 43 THEN 'PASS' ELSE 'FAIL' END),
     ('C02', 'Views in public', '33', v_views::text, CASE WHEN v_views = 33 THEN 'PASS' ELSE 'FAIL' END),
-    ('C03', 'Functions in public', '114', v_functions::text, CASE WHEN v_functions = 114 THEN 'PASS' ELSE 'FAIL' END),
+    ('C03', 'Functions in public', '115', v_functions::text, CASE WHEN v_functions = 115 THEN 'PASS' ELSE 'FAIL' END),
     ('C04', 'Policies in public', '71', v_policies::text, CASE WHEN v_policies = 71 THEN 'PASS' ELSE 'FAIL' END),
     ('C05', 'Triggers in public', '68', v_triggers::text, CASE WHEN v_triggers = 68 THEN 'PASS' ELSE 'FAIL' END),
     ('C06', 'Indexes in public', '131', v_indexes::text, CASE WHEN v_indexes = 131 THEN 'PASS' ELSE 'FAIL' END),

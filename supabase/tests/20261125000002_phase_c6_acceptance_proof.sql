@@ -1,0 +1,563 @@
+-- ============================================================================
+-- Acceptance Suite: Phase C6 Cohort Contribution Margin Proof
+-- File: supabase/tests/20261125000002_phase_c6_acceptance_proof.sql
+-- Reference Migration MD5: 340e9808b72db129d4ed5044be7f1933
+-- Description:
+--   Verifies C6 read-only cohort contribution margin against C5/C3 sources:
+--     Test 1: Multi-currency separation: one cohort yields independent SYP/USD rows.
+--     Test 2: Cost aggregation and unbounded negative ratio (no numeric overflow).
+--     Test 3: Future trainer dues (period_end > as-of) are excluded.
+--     Test 4: Cancelled trainer dues are excluded (has_trainer_cost = false).
+--     Test 5: FULL OUTER: dues-only cohort appears with earned 0 and NULL ratio.
+--     Test 6: Zero-rate due row exists => has_trainer_cost true with cost 0.
+--     Test 7: trainees_count = COUNT(DISTINCT trainee_id), includes completed.
+--     Test 8: Universal invariants: margin identity, ratio NULL rules, bounds.
+--     Test 9: Universal parity with C5 earned revenue per (cohort, currency).
+--     Test 10: Explicit trainee_code fixtures leave trainee_code_seq untouched.
+--     Test 11: Guards: NULL => P0002, reception => P0001, anon => 42501; pinned secdef.
+-- Safety: Fully transactional. Enclosed in BEGIN ... ROLLBACK.
+-- Fixtures: All trainees use explicit trainee_code (no nextval consumption).
+-- Output: Structured RAISE NOTICE for every test in Messages tab.
+-- Requirements: Migrations 20261123000001 (C5) and 20261125000001 (C6) applied.
+-- ============================================================================
+
+BEGIN;
+
+DO $$
+#variable_conflict use_column
+DECLARE
+  v_admin_id uuid;
+  v_reception_id uuid;
+  v_trainer_id uuid;
+  v_course_id uuid;
+
+  v_cohort_a uuid;
+  v_cohort_b uuid;
+  v_cohort_c uuid;
+  v_cohort_d uuid;
+  v_cohort_f uuid;
+
+  v_t1 uuid;
+  v_t2 uuid;
+  v_t3 uuid;
+  v_t4 uuid;
+  v_t5 uuid;
+
+  v_enr_a_syp uuid;
+  v_enr_a_usd uuid;
+  v_enr_c_active uuid;
+  v_enr_c_completed uuid;
+  v_enr_f uuid;
+
+  v_today date := (now() AT TIME ZONE 'Asia/Damascus')::date;
+  v_prev_start date := (date_trunc('month', (now() AT TIME ZONE 'Asia/Damascus')::date) - interval '1 month')::date;
+  v_prev_end date := (date_trunc('month', (now() AT TIME ZONE 'Asia/Damascus')::date) - interval '1 day')::date;
+  v_old_start date := (date_trunc('month', (now() AT TIME ZONE 'Asia/Damascus')::date) - interval '2 months')::date;
+  v_old_end date := (date_trunc('month', (now() AT TIME ZONE 'Asia/Damascus')::date) - interval '1 month' - interval '1 day')::date;
+  v_next_start date := (date_trunc('month', (now() AT TIME ZONE 'Asia/Damascus')::date) + interval '1 month')::date;
+  v_next_end date := (date_trunc('month', (now() AT TIME ZONE 'Asia/Damascus')::date) + interval '2 months' - interval '1 day')::date;
+
+  v_row record;
+  v_state text;
+  v_msg text;
+  v_caught boolean := false;
+  v_bad int := 0;
+  v_count int := 0;
+
+  v_seq_before bigint;
+  v_seq_after bigint;
+  v_seq_called_before boolean;
+  v_seq_called_after boolean;
+
+  v_prosecdef boolean;
+  v_pinned boolean;
+  v_anon_exec boolean;
+  v_auth_exec boolean;
+
+  v_sample jsonb;
+BEGIN
+  RAISE NOTICE '=== Starting Phase C6 Cohort Contribution Margin Acceptance Proof ===';
+  RAISE NOTICE 'Context: Database=%, User=%, DamascusDate=%, Clock=%',
+    current_database(), current_user, v_today, clock_timestamp();
+  RAISE NOTICE 'Contract Hashes: Migration_MD5=340e9808b72db129d4ed5044be7f1933';
+  RAISE NOTICE 'Operational Rule: Do not run within 60s of Damascus midnight (23:59:00 - 00:01:00)';
+
+  -- --------------------------------------------------------------------------
+  -- 0. Setup: Identify or mock admin and reception users (same pattern as C5)
+  -- --------------------------------------------------------------------------
+  SELECT u.id INTO v_admin_id
+  FROM public.users u
+  JOIN auth.users a ON a.id = u.id
+  WHERE u.role = 'admin' AND u.is_active
+  LIMIT 1;
+
+  IF v_admin_id IS NULL THEN
+    v_admin_id := gen_random_uuid();
+    INSERT INTO auth.users (id, instance_id, aud, role, email, raw_app_meta_data, raw_user_meta_data, created_at, updated_at)
+    VALUES (v_admin_id, '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated',
+            'c6_admin_' || substr(v_admin_id::text, 1, 8) || '@example.com',
+            '{"provider":"email","providers":["email"]}',
+            '{"role":"admin"}', now(), now());
+    INSERT INTO public.users (id, full_name, email, role, is_active)
+    VALUES (v_admin_id, 'C6 Admin Test', 'c6_admin_' || substr(v_admin_id::text, 1, 8) || '@example.com', 'admin', true);
+  END IF;
+
+  SELECT u.id INTO v_reception_id
+  FROM public.users u
+  JOIN auth.users a ON a.id = u.id
+  WHERE u.role = 'reception' AND u.is_active
+  LIMIT 1;
+
+  IF v_reception_id IS NULL THEN
+    v_reception_id := gen_random_uuid();
+    INSERT INTO auth.users (id, instance_id, aud, role, email, raw_app_meta_data, raw_user_meta_data, created_at, updated_at)
+    VALUES (v_reception_id, '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated',
+            'c6_rec_' || substr(v_reception_id::text, 1, 8) || '@example.com',
+            '{"provider":"email","providers":["email"]}',
+            '{"role":"reception"}', now(), now());
+    INSERT INTO public.users (id, full_name, email, role, is_active)
+    VALUES (v_reception_id, 'C6 Reception Test', 'c6_rec_' || substr(v_reception_id::text, 1, 8) || '@example.com', 'reception', true);
+  END IF;
+
+  -- Act as Admin
+  PERFORM set_config('request.jwt.claim.sub', v_admin_id::text, true);
+  PERFORM set_config('request.jwt.claims', json_build_object(
+    'sub', v_admin_id,
+    'role', 'authenticated',
+    'user_metadata', json_build_object('role', 'admin')
+  )::text, true);
+
+  -- Trainee code sequence baseline (must stay untouched: fixtures use explicit codes)
+  SELECT last_value, is_called INTO v_seq_before, v_seq_called_before
+  FROM public.trainee_code_seq;
+
+  v_trainer_id := v_admin_id;
+
+  -- --------------------------------------------------------------------------
+  -- 1. Fixtures: Course, Cohorts, Trainees (explicit codes), Sessions
+  -- --------------------------------------------------------------------------
+  v_course_id := gen_random_uuid();
+  INSERT INTO public.courses (id, name, total_sessions, price, created_by, is_active)
+  VALUES (v_course_id, 'C6 Contribution Verification Course', 10, 100000.00, v_admin_id, true);
+
+  -- A: multi-currency cohort with SYP and USD enrollments
+  v_cohort_a := gen_random_uuid();
+  INSERT INTO public.cohorts (id, course_id, trainer_id, name, starts_at, created_by, is_active)
+  VALUES (v_cohort_a, v_course_id, v_trainer_id, 'C6 Main Multi-Currency Cohort', v_today - 30, v_admin_id, true);
+
+  -- B: dues-only cohort (no enrollments)
+  v_cohort_b := gen_random_uuid();
+  INSERT INTO public.cohorts (id, course_id, trainer_id, name, starts_at, created_by, is_active)
+  VALUES (v_cohort_b, v_course_id, v_trainer_id, 'C6 Dues-Only Cohort', v_today - 30, v_admin_id, true);
+
+  -- C: revenue-only cohort with a cancelled due (active + completed enrollments)
+  v_cohort_c := gen_random_uuid();
+  INSERT INTO public.cohorts (id, course_id, trainer_id, name, starts_at, created_by, is_active)
+  VALUES (v_cohort_c, v_course_id, v_trainer_id, 'C6 Cancelled-Due Cohort', v_today - 10, v_admin_id, true);
+
+  -- D: dues-only cohort with a zero-rate (amount 0) due
+  v_cohort_d := gen_random_uuid();
+  INSERT INTO public.cohorts (id, course_id, trainer_id, name, starts_at, created_by, is_active)
+  VALUES (v_cohort_d, v_course_id, v_trainer_id, 'C6 Zero-Rate Cohort', v_today - 30, v_admin_id, true);
+
+  -- F: revenue cohort whose only due is in the future
+  v_cohort_f := gen_random_uuid();
+  INSERT INTO public.cohorts (id, course_id, trainer_id, name, starts_at, created_by, is_active)
+  VALUES (v_cohort_f, v_course_id, v_trainer_id, 'C6 Future-Due Cohort', v_today - 10, v_admin_id, true);
+
+  v_t1 := gen_random_uuid();
+  INSERT INTO public.trainees (id, trainee_code, full_name_ar, created_by)
+  VALUES (v_t1, 'C6T' || upper(substr(v_t1::text, 1, 8)), 'متدرب C6 أول SYP', v_admin_id);
+
+  v_t2 := gen_random_uuid();
+  INSERT INTO public.trainees (id, trainee_code, full_name_ar, created_by)
+  VALUES (v_t2, 'C6T' || upper(substr(v_t2::text, 1, 8)), 'متدرب C6 ثاني USD', v_admin_id);
+
+  v_t3 := gen_random_uuid();
+  INSERT INTO public.trainees (id, trainee_code, full_name_ar, created_by)
+  VALUES (v_t3, 'C6T' || upper(substr(v_t3::text, 1, 8)), 'متدرب C6 ثالث نشط', v_admin_id);
+
+  v_t4 := gen_random_uuid();
+  INSERT INTO public.trainees (id, trainee_code, full_name_ar, created_by)
+  VALUES (v_t4, 'C6T' || upper(substr(v_t4::text, 1, 8)), 'متدرب C6 رابع مكتمل', v_admin_id);
+
+  v_t5 := gen_random_uuid();
+  INSERT INTO public.trainees (id, trainee_code, full_name_ar, created_by)
+  VALUES (v_t5, 'C6T' || upper(substr(v_t5::text, 1, 8)), 'متدرب C6 خامس مستقبلي', v_admin_id);
+
+  -- Sessions: A delivered 2/10; C and F delivered 1/10 each
+  INSERT INTO public.sessions (id, cohort_id, session_number, scheduled_at, status, closed_at, is_extra)
+  VALUES
+    (gen_random_uuid(), v_cohort_a, 1, (v_today - 12)::timestamp with time zone, 'closed', (v_today - 12)::timestamp with time zone, false),
+    (gen_random_uuid(), v_cohort_a, 2, (v_today - 6)::timestamp with time zone, 'closed', (v_today - 6)::timestamp with time zone, false),
+    (gen_random_uuid(), v_cohort_c, 1, (v_today - 3)::timestamp with time zone, 'closed', (v_today - 3)::timestamp with time zone, false),
+    (gen_random_uuid(), v_cohort_f, 1, (v_today - 3)::timestamp with time zone, 'closed', (v_today - 3)::timestamp with time zone, false);
+
+  -- --------------------------------------------------------------------------
+  -- 2. Enrollments
+  -- --------------------------------------------------------------------------
+  v_enr_a_syp := gen_random_uuid();
+  INSERT INTO public.enrollments (id, cohort_id, trainee_id, enrolled_at, created_by, status, lifecycle_status, total_due, discount_amount, currency)
+  VALUES (v_enr_a_syp, v_cohort_a, v_t1, (v_today - 30)::timestamp with time zone, v_admin_id, 'unpaid', 'active', 100000.00, 0.00, 'SYP');
+
+  v_enr_a_usd := gen_random_uuid();
+  INSERT INTO public.enrollments (id, cohort_id, trainee_id, enrolled_at, created_by, status, lifecycle_status, total_due, discount_amount, currency)
+  VALUES (v_enr_a_usd, v_cohort_a, v_t2, (v_today - 30)::timestamp with time zone, v_admin_id, 'unpaid', 'active', 50.00, 0.00, 'USD');
+
+  v_enr_c_active := gen_random_uuid();
+  INSERT INTO public.enrollments (id, cohort_id, trainee_id, enrolled_at, created_by, status, lifecycle_status, total_due, discount_amount, currency)
+  VALUES (v_enr_c_active, v_cohort_c, v_t3, (v_today - 10)::timestamp with time zone, v_admin_id, 'unpaid', 'active', 100000.00, 0.00, 'SYP');
+
+  v_enr_c_completed := gen_random_uuid();
+  INSERT INTO public.enrollments (id, cohort_id, trainee_id, enrolled_at, created_by, status, lifecycle_status, total_due, discount_amount, currency, completed_at)
+  VALUES (v_enr_c_completed, v_cohort_c, v_t4, (v_today - 10)::timestamp with time zone, v_admin_id, 'unpaid', 'completed', 100000.00, 0.00, 'SYP', (v_today - 1)::timestamp with time zone);
+
+  v_enr_f := gen_random_uuid();
+  INSERT INTO public.enrollments (id, cohort_id, trainee_id, enrolled_at, created_by, status, lifecycle_status, total_due, discount_amount, currency)
+  VALUES (v_enr_f, v_cohort_f, v_t5, (v_today - 10)::timestamp with time zone, v_admin_id, 'unpaid', 'active', 100000.00, 0.00, 'SYP');
+
+  -- --------------------------------------------------------------------------
+  -- 3. Trainer dues (C3): past / future / cancelled / zero-rate
+  -- --------------------------------------------------------------------------
+  INSERT INTO public.trainer_dues (id, trainer_id, cohort_id, period_start, period_end, currency, basis_amount, rate_percent, amount, status, created_by)
+  VALUES
+    -- A SYP: past month, 500,000 (ratio -24 with earned 20,000)
+    (gen_random_uuid(), v_trainer_id, v_cohort_a, v_prev_start, v_prev_end, 'SYP', 1000000.00, 50.00, 500000.00, 'pending', v_admin_id),
+    -- A USD: past month, 5.00
+    (gen_random_uuid(), v_trainer_id, v_cohort_a, v_prev_start, v_prev_end, 'USD', 100.00, 5.00, 5.00, 'pending', v_admin_id),
+    -- A SYP: FUTURE month, must be excluded
+    (gen_random_uuid(), v_trainer_id, v_cohort_a, v_next_start, v_next_end, 'SYP', 100000.00, 90.00, 90000.00, 'pending', v_admin_id),
+    -- A USD: older month, CANCELLED, must be excluded
+    (gen_random_uuid(), v_trainer_id, v_cohort_a, v_old_start, v_old_end, 'USD', 100.00, 100.00, 100.00, 'cancelled', v_admin_id),
+    -- B SYP: dues-only cohort, past month, 50,000
+    (gen_random_uuid(), v_trainer_id, v_cohort_b, v_prev_start, v_prev_end, 'SYP', 100000.00, 50.00, 50000.00, 'pending', v_admin_id),
+    -- D SYP: zero-rate due, past month, 0.00 (existence still true)
+    (gen_random_uuid(), v_trainer_id, v_cohort_d, v_prev_start, v_prev_end, 'SYP', 10000.00, 0.00, 0.00, 'pending', v_admin_id),
+    -- F SYP: FUTURE only, must be excluded (has_trainer_cost = false)
+    (gen_random_uuid(), v_trainer_id, v_cohort_f, v_next_start, v_next_end, 'SYP', 100000.00, 90.00, 90000.00, 'pending', v_admin_id);
+
+  RAISE NOTICE 'Fixtures created: course=% cohorts=% trainees=% enrollments=% dues=%',
+    v_course_id, 5, 5, 5, 7;
+
+  -- --------------------------------------------------------------------------
+  -- Test 1: Multi-currency separation
+  -- --------------------------------------------------------------------------
+  SELECT count(*) INTO v_count
+  FROM public.get_cohort_contribution_report(v_today)
+  WHERE cohort_id IN (v_cohort_a, v_cohort_b, v_cohort_c, v_cohort_d, v_cohort_f);
+
+  ASSERT v_count = 6,
+    format('Test 1 Failed: expected 6 fixture rows (A x2, B, C, D, F), got %s', v_count);
+
+  SELECT * INTO v_row
+  FROM public.get_cohort_contribution_report(v_today) r
+  WHERE r.cohort_id = v_cohort_a AND r.currency = 'SYP';
+  ASSERT FOUND, 'Test 1 Failed: main cohort SYP row missing';
+  ASSERT v_row.earned_revenue = 20000.00,
+    format('Test 1 Failed: A SYP earned expected 20000.00, got %s', v_row.earned_revenue);
+
+  SELECT * INTO v_row
+  FROM public.get_cohort_contribution_report(v_today) r
+  WHERE r.cohort_id = v_cohort_a AND r.currency = 'USD';
+  ASSERT FOUND, 'Test 1 Failed: main cohort USD row missing';
+  ASSERT v_row.earned_revenue = 10.00,
+    format('Test 1 Failed: A USD earned expected 10.00, got %s', v_row.earned_revenue);
+
+  SELECT count(*) INTO v_count
+  FROM public.get_cohort_contribution_report(v_today)
+  WHERE cohort_id = v_cohort_a;
+  ASSERT v_count = 2,
+    format('Test 1 Failed: multi-currency cohort must yield 2 independent rows, got %s', v_count);
+
+  RAISE NOTICE '[Test 1] PASS - Multi-currency separation: A yields SYP (earned=20000.00) and USD (earned=10.00) rows independently';
+
+  -- --------------------------------------------------------------------------
+  -- Test 2: Cost aggregation and unbounded negative ratio (no overflow)
+  -- --------------------------------------------------------------------------
+  SELECT * INTO v_row
+  FROM public.get_cohort_contribution_report(v_today) r
+  WHERE r.cohort_id = v_cohort_a AND r.currency = 'SYP';
+  ASSERT v_row.trainer_cost = 500000.00,
+    format('Test 2 Failed: A SYP cost expected 500000.00, got %s', v_row.trainer_cost);
+  ASSERT v_row.contribution_margin = -480000.00,
+    format('Test 2 Failed: A SYP margin expected -480000.00, got %s', v_row.contribution_margin);
+  ASSERT v_row.margin_ratio IS NOT NULL AND v_row.margin_ratio < -10.0,
+    format('Test 2 Failed: A SYP ratio expected < -10 (unbounded numeric), got %s', v_row.margin_ratio);
+  ASSERT round(v_row.margin_ratio, 4) = -24.0000,
+    format('Test 2 Failed: A SYP ratio expected -24.0000, got %s', v_row.margin_ratio);
+
+  SELECT * INTO v_row
+  FROM public.get_cohort_contribution_report(v_today) r
+  WHERE r.cohort_id = v_cohort_a AND r.currency = 'USD';
+  ASSERT v_row.trainer_cost = 5.00,
+    format('Test 2 Failed: A USD cost expected 5.00, got %s', v_row.trainer_cost);
+  ASSERT v_row.contribution_margin = 5.00,
+    format('Test 2 Failed: A USD margin expected 5.00, got %s', v_row.contribution_margin);
+  ASSERT round(v_row.margin_ratio, 6) = 0.500000,
+    format('Test 2 Failed: A USD ratio expected 0.500000, got %s', v_row.margin_ratio);
+
+  RAISE NOTICE '[Test 2] PASS - Cost aggregation and unbounded ratio: SYP margin=-480000.00 ratio=-24.0000 (no overflow), USD ratio=0.500000';
+
+  -- --------------------------------------------------------------------------
+  -- Test 3: Future dues excluded (period_end > p_as_of)
+  -- --------------------------------------------------------------------------
+  SELECT * INTO v_row
+  FROM public.get_cohort_contribution_report(v_today) r
+  WHERE r.cohort_id = v_cohort_f AND r.currency = 'SYP';
+  ASSERT FOUND, 'Test 3 Failed: future-due cohort row missing (revenue side must appear)';
+  ASSERT v_row.earned_revenue = 10000.00,
+    format('Test 3 Failed: F earned expected 10000.00, got %s', v_row.earned_revenue);
+  ASSERT v_row.trainer_cost = 0.00,
+    format('Test 3 Failed: future dues must be excluded, expected cost 0.00, got %s', v_row.trainer_cost);
+  ASSERT v_row.has_trainer_cost = false,
+    'Test 3 Failed: has_trainer_cost must be false when only future dues exist';
+  ASSERT v_row.contribution_margin = 10000.00,
+    format('Test 3 Failed: F margin expected 10000.00, got %s', v_row.contribution_margin);
+  ASSERT round(v_row.margin_ratio, 6) = 1.000000,
+    format('Test 3 Failed: F ratio expected 1.000000, got %s', v_row.margin_ratio);
+
+  SELECT * INTO v_row
+  FROM public.get_cohort_contribution_report(v_today) r
+  WHERE r.cohort_id = v_cohort_a AND r.currency = 'SYP';
+  ASSERT v_row.trainer_cost = 500000.00,
+    format('Test 3 Failed: future A SYP due leaked into cost (expected 500000.00, got %s)', v_row.trainer_cost);
+
+  RAISE NOTICE '[Test 3] PASS - Future dues excluded: F cost=0.00 has_trainer_cost=false; A SYP cost excludes next-month 90000.00';
+
+  -- --------------------------------------------------------------------------
+  -- Test 4: Cancelled dues excluded
+  -- --------------------------------------------------------------------------
+  SELECT * INTO v_row
+  FROM public.get_cohort_contribution_report(v_today) r
+  WHERE r.cohort_id = v_cohort_c AND r.currency = 'SYP';
+  ASSERT FOUND, 'Test 4 Failed: cancelled-due cohort row missing';
+  ASSERT v_row.earned_revenue = 110000.00,
+    format('Test 4 Failed: C earned expected 110000.00 (active 10000 + completed 100000), got %s', v_row.earned_revenue);
+  ASSERT v_row.trainer_cost = 0.00,
+    format('Test 4 Failed: cancelled due must be excluded, expected cost 0.00, got %s', v_row.trainer_cost);
+  ASSERT v_row.has_trainer_cost = false,
+    'Test 4 Failed: has_trainer_cost must be false when the only due is cancelled';
+  ASSERT v_row.contribution_margin = 110000.00,
+    format('Test 4 Failed: C margin expected 110000.00, got %s', v_row.contribution_margin);
+  ASSERT round(v_row.margin_ratio, 6) = 1.000000,
+    format('Test 4 Failed: C ratio expected 1.000000, got %s', v_row.margin_ratio);
+
+  RAISE NOTICE '[Test 4] PASS - Cancelled dues excluded: C cost=0.00 has_trainer_cost=false with earned=110000.00';
+
+  -- --------------------------------------------------------------------------
+  -- Test 5: FULL OUTER JOIN — dues-only cohort
+  -- --------------------------------------------------------------------------
+  SELECT * INTO v_row
+  FROM public.get_cohort_contribution_report(v_today) r
+  WHERE r.cohort_id = v_cohort_b AND r.currency = 'SYP';
+  ASSERT FOUND, 'Test 5 Failed: dues-only cohort missing from FULL OUTER JOIN';
+  ASSERT v_row.cohort_name = 'C6 Dues-Only Cohort',
+    format('Test 5 Failed: unexpected cohort_name %s', v_row.cohort_name);
+  ASSERT v_row.earned_revenue = 0.00,
+    format('Test 5 Failed: dues-only earned expected 0.00, got %s', v_row.earned_revenue);
+  ASSERT v_row.trainer_cost = 50000.00,
+    format('Test 5 Failed: dues-only cost expected 50000.00, got %s', v_row.trainer_cost);
+  ASSERT v_row.contribution_margin = -50000.00,
+    format('Test 5 Failed: dues-only margin expected -50000.00, got %s', v_row.contribution_margin);
+  ASSERT v_row.margin_ratio IS NULL,
+    format('Test 5 Failed: ratio must be NULL when earned=0, got %s', v_row.margin_ratio);
+  ASSERT v_row.trainees_count = 0,
+    format('Test 5 Failed: dues-only trainees_count expected 0, got %s', v_row.trainees_count);
+  ASSERT v_row.has_trainer_cost = true,
+    'Test 5 Failed: dues-only has_trainer_cost must be true';
+
+  RAISE NOTICE '[Test 5] PASS - FULL OUTER dues-only row: earned=0.00 cost=50000.00 margin=-50000.00 ratio=NULL trainees=0';
+
+  -- --------------------------------------------------------------------------
+  -- Test 6: Zero-rate due existence semantics
+  -- --------------------------------------------------------------------------
+  SELECT * INTO v_row
+  FROM public.get_cohort_contribution_report(v_today) r
+  WHERE r.cohort_id = v_cohort_d AND r.currency = 'SYP';
+  ASSERT FOUND, 'Test 6 Failed: zero-rate dues-only cohort missing';
+  ASSERT v_row.earned_revenue = 0.00,
+    format('Test 6 Failed: D earned expected 0.00, got %s', v_row.earned_revenue);
+  ASSERT v_row.trainer_cost = 0.00,
+    format('Test 6 Failed: D cost expected 0.00, got %s', v_row.trainer_cost);
+  ASSERT v_row.contribution_margin = 0.00,
+    format('Test 6 Failed: D margin expected 0.00, got %s', v_row.contribution_margin);
+  ASSERT v_row.margin_ratio IS NULL,
+    format('Test 6 Failed: D ratio must be NULL, got %s', v_row.margin_ratio);
+  ASSERT v_row.has_trainer_cost = true,
+    'Test 6 Failed: has_trainer_cost must be true for an existing zero-amount due (existence, not amount)';
+
+  RAISE NOTICE '[Test 6] PASS - Zero-rate due: cost=0.00 but has_trainer_cost=true (existence semantics)';
+
+  -- --------------------------------------------------------------------------
+  -- Test 7: trainees_count = COUNT(DISTINCT trainee_id), includes completed
+  -- --------------------------------------------------------------------------
+  SELECT trainees_count INTO v_count
+  FROM public.get_cohort_contribution_report(v_today)
+  WHERE cohort_id = v_cohort_c AND currency = 'SYP';
+  ASSERT v_count = 2,
+    format('Test 7 Failed: C trainees_count expected 2 (active + completed), got %s', v_count);
+
+  SELECT count(*) INTO v_bad
+  FROM (
+    SELECT r.cohort_id, r.currency::text AS curr, count(DISTINCT r.trainee_id)::int AS n
+    FROM public.get_accrual_revenue_report(v_today) r
+    GROUP BY r.cohort_id, r.currency
+  ) a
+  JOIN public.get_cohort_contribution_report(v_today) b
+    ON b.cohort_id = a.cohort_id AND b.currency = a.curr
+  WHERE b.trainees_count <> a.n;
+
+  ASSERT v_bad = 0,
+    format('Test 7 Failed: %s rows have trainees_count <> COUNT(DISTINCT trainee_id) from C5', v_bad);
+
+  RAISE NOTICE '[Test 7] PASS - trainees_count = COUNT(DISTINCT trainee_id) and includes completed enrollments (C=2)';
+
+  -- --------------------------------------------------------------------------
+  -- Test 8: Universal invariants
+  -- --------------------------------------------------------------------------
+  SELECT count(*) INTO v_bad
+  FROM public.get_cohort_contribution_report(v_today)
+  WHERE contribution_margin <> (earned_revenue - trainer_cost)
+     OR trainer_cost < 0
+     OR earned_revenue < 0
+     OR trainees_count < 0
+     OR margin_ratio > 1.0000001
+     OR (earned_revenue = 0 AND margin_ratio IS NOT NULL)
+     OR (earned_revenue > 0 AND margin_ratio IS NULL)
+     OR (earned_revenue > 0 AND abs(margin_ratio * earned_revenue - contribution_margin) > 0.01)
+     OR (has_trainer_cost = false AND trainer_cost <> 0)
+     OR (has_trainer_cost = true AND trainer_cost < 0);
+
+  ASSERT v_bad = 0,
+    format('Test 8 Failed: %s rows violate universal margin/ratio invariants', v_bad);
+
+  RAISE NOTICE '[Test 8] PASS - Universal invariants: margin identity, ratio NULL rules, ratio<=1, has_trainer_cost consistency (0 violations)';
+
+  -- --------------------------------------------------------------------------
+  -- Test 9: Universal parity with C5 earned revenue per (cohort, currency)
+  -- --------------------------------------------------------------------------
+  SELECT count(*) INTO v_bad
+  FROM (
+    SELECT r.cohort_id, r.currency::text AS curr, sum(r.earned_revenue)::numeric AS earned
+    FROM public.get_accrual_revenue_report(v_today) r
+    GROUP BY r.cohort_id, r.currency
+  ) c5
+  FULL OUTER JOIN (
+    SELECT g.cohort_id, g.currency, g.earned_revenue, g.trainees_count
+    FROM public.get_cohort_contribution_report(v_today) g
+  ) c6
+    ON c6.cohort_id = c5.cohort_id AND c6.currency = c5.curr
+  WHERE (c5.cohort_id IS NOT NULL AND (c6.cohort_id IS NULL OR c6.earned_revenue <> c5.earned))
+     OR (c5.cohort_id IS NULL AND c6.trainees_count > 0);
+
+  ASSERT v_bad = 0,
+    format('Test 9 Failed: %s (cohort, currency) groups diverge from C5 earned revenue', v_bad);
+
+  RAISE NOTICE '[Test 9] PASS - C5 parity: every revenue group matches C5 sum exactly; no revenue row lost, no phantom revenue row';
+
+  -- --------------------------------------------------------------------------
+  -- Test 10: Explicit trainee codes leave trainee_code_seq untouched
+  -- --------------------------------------------------------------------------
+  SELECT last_value, is_called INTO v_seq_after, v_seq_called_after
+  FROM public.trainee_code_seq;
+
+  ASSERT v_seq_after IS NOT DISTINCT FROM v_seq_before,
+    format('Test 10 Failed: trainee_code_seq advanced (%s -> %s); fixtures must not consume sequence values', v_seq_before, v_seq_after);
+  ASSERT v_seq_called_after IS NOT DISTINCT FROM v_seq_called_before,
+    format('Test 10 Failed: trainee_code_seq is_called changed (%s -> %s)', v_seq_called_before, v_seq_called_after);
+
+  RAISE NOTICE '[Test 10] PASS - trainee_code_seq untouched (last_value=% is_called=%)', v_seq_after, v_seq_called_after;
+
+  -- --------------------------------------------------------------------------
+  -- Test 11: Guards and structural security
+  -- --------------------------------------------------------------------------
+  -- NULL as-of -> P0002
+  v_caught := false;
+  BEGIN
+    PERFORM public.get_cohort_contribution_report(NULL::date);
+  EXCEPTION WHEN OTHERS THEN
+    GET STACKED DIAGNOSTICS v_state = RETURNED_SQLSTATE, v_msg = MESSAGE_TEXT;
+    v_caught := true;
+  END;
+  ASSERT v_caught = true AND v_state = 'P0002',
+    format('Test 11 Failed: NULL as-of must raise P0002, got state=%s msg=%s', v_state, v_msg);
+
+  -- Structural: SECURITY DEFINER + pinned search_path
+  SELECT p.prosecdef,
+         EXISTS (SELECT 1 FROM unnest(coalesce(p.proconfig, '{}')) AS c WHERE c LIKE 'search_path=%')
+    INTO v_prosecdef, v_pinned
+  FROM pg_proc p
+  WHERE p.oid = 'public.get_cohort_contribution_report(date)'::regprocedure;
+
+  ASSERT v_prosecdef = true,
+    'Test 11 Failed: function must be SECURITY DEFINER';
+  ASSERT v_pinned = true,
+    'Test 11 Failed: SECURITY DEFINER function must pin search_path';
+
+  SELECT has_function_privilege('anon', 'public.get_cohort_contribution_report(date)', 'EXECUTE'),
+         has_function_privilege('authenticated', 'public.get_cohort_contribution_report(date)', 'EXECUTE')
+    INTO v_anon_exec, v_auth_exec;
+
+  ASSERT v_anon_exec = false,
+    'Test 11 Failed: anon must not have EXECUTE on the function';
+  ASSERT v_auth_exec = true,
+    'Test 11 Failed: authenticated must have EXECUTE (guard then enforces admin)';
+
+  -- Reception -> P0001
+  PERFORM set_config('request.jwt.claim.sub', v_reception_id::text, true);
+  PERFORM set_config('request.jwt.claims', json_build_object(
+    'sub', v_reception_id,
+    'role', 'authenticated',
+    'user_metadata', json_build_object('role', 'reception')
+  )::text, true);
+
+  v_caught := false;
+  BEGIN
+    PERFORM public.get_cohort_contribution_report(v_today);
+  EXCEPTION WHEN OTHERS THEN
+    GET STACKED DIAGNOSTICS v_state = RETURNED_SQLSTATE, v_msg = MESSAGE_TEXT;
+    v_caught := true;
+  END;
+  ASSERT v_caught = true AND v_state = 'P0001' AND v_msg LIKE '%غير مصرّح%',
+    format('Test 11 Failed: reception must get P0001 unauthorized, got state=%s msg=%s', v_state, v_msg);
+  RAISE NOTICE '[Test 11a] Reception denied with P0001: %', v_msg;
+
+  -- Anonymous -> 42501 (grant-level denial)
+  RESET ROLE;
+  SET LOCAL ROLE anon;
+
+  v_caught := false;
+  BEGIN
+    PERFORM public.get_cohort_contribution_report(v_today);
+  EXCEPTION WHEN OTHERS THEN
+    GET STACKED DIAGNOSTICS v_state = RETURNED_SQLSTATE, v_msg = MESSAGE_TEXT;
+    v_caught := true;
+  END;
+  ASSERT v_caught = true AND v_state = '42501',
+    format('Test 11 Failed: anon must get 42501, got state=%s msg=%s', v_state, v_msg);
+
+  RESET ROLE;
+
+  RAISE NOTICE '[Test 11] PASS - Guards: NULL=P0002, reception=P0001, anon=42501; secdef=true pinned=true, anon_exec=false auth_exec=true';
+
+  -- Restore Admin claims for sample extraction
+  PERFORM set_config('request.jwt.claim.sub', v_admin_id::text, true);
+  PERFORM set_config('request.jwt.claims', json_build_object(
+    'sub', v_admin_id,
+    'role', 'authenticated',
+    'user_metadata', json_build_object('role', 'admin')
+  )::text, true);
+
+  SELECT to_jsonb(g) INTO v_sample
+  FROM public.get_cohort_contribution_report(v_today) g
+  WHERE g.cohort_id = v_cohort_a AND g.currency = 'SYP';
+
+  RAISE NOTICE '============================================================';
+  RAISE NOTICE 'Sample Cohort Contribution JSON Row (cohort_id = %, currency = SYP):', v_cohort_a;
+  RAISE NOTICE '%', v_sample::text;
+  RAISE NOTICE '============================================================';
+  RAISE NOTICE '=== ALL 11 PHASE C6 ACCEPTANCE TESTS PASSED (11/11) ===';
+  RAISE NOTICE 'Safety: enclosed in BEGIN ... ROLLBACK; no fixtures, audit rows, or sequence values persist.';
+END $$;
+
+ROLLBACK;

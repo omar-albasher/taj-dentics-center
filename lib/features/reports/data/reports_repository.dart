@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../domain/accrual_models.dart';
+import '../domain/cohort_contribution_models.dart';
 import '../domain/financial_statement_models.dart';
 
 class ReportsRepository {
@@ -53,6 +54,20 @@ class ReportsRepository {
     );
     final map = Map<String, dynamic>.from(response as Map);
     return CompleteCohortResult.fromMap(map);
+  }
+
+  // ─── Phase C6 Cohort Contribution Margin ───
+  Future<List<CohortContributionRow>> getCohortContributionReport(
+    DateTime asOf,
+  ) async {
+    final response = await _client.rpc(
+      'get_cohort_contribution_report',
+      params: {
+        'p_as_of': _formatDate(asOf),
+      },
+    );
+    final rows = List<Map<String, dynamic>>.from(response as List);
+    return rows.map(CohortContributionRow.fromMap).toList();
   }
 
   // ─── Phase C4 Financial Statements (v3 RPCs) ───
@@ -301,4 +316,25 @@ final accrualReconciliationProvider =
   return ref
       .watch(reportsRepositoryProvider)
       .getAccrualReconciliation(period.from, period.to);
+});
+
+// ─── Phase C6 Providers ───
+class CohortContributionAsOfDateNotifier extends Notifier<DateTime> {
+  @override
+  DateTime build() => DateTime.now();
+
+  void setDate(DateTime date) {
+    state = date;
+  }
+}
+
+final cohortContributionAsOfDateProvider =
+    NotifierProvider<CohortContributionAsOfDateNotifier, DateTime>(
+  CohortContributionAsOfDateNotifier.new,
+);
+
+final cohortContributionReportProvider =
+    FutureProvider<List<CohortContributionRow>>((ref) {
+  final asOf = ref.watch(cohortContributionAsOfDateProvider);
+  return ref.watch(reportsRepositoryProvider).getCohortContributionReport(asOf);
 });
