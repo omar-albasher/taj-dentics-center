@@ -1,0 +1,2 @@
+supabase/baseline/*.txt -text
+supabase/tests/*.txt    -text
