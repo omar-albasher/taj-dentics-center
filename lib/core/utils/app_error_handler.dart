@@ -50,6 +50,10 @@ class AppErrorHandler {
     'REFERRAL_DISCOUNT_TOO_HIGH':
         'قيمة خصم الإحالة أكبر من المبلغ المتبقي بعد الخصم اليدوي',
     'REFERRAL_DISCOUNT_INVALID': 'قيمة خصم الإحالة غير صالحة',
+    'P0005': 'لا يمكن إضافة أو تعديل أو حذف حركة مالية تقع ضمن فترة محاسبية مغلقة',
+    'P0006': 'إجراء غير مسموح على الفترة المحاسبية — تأكد من التاريخ أو استخدم الإقفال الإجباري',
+    'ACCOUNTING_PERIOD_CLOSED':
+        'لا يمكن تعديل أو تسجيل حركة مالية تقع ضمن فترة محاسبية مغلقة',
   };
 
   /// Converts any technical or database exception into a clear, user-friendly Arabic message.
@@ -131,6 +135,12 @@ class AppErrorHandler {
         return 'هذا السجل أو البيان موجود مسبقاً في النظام';
       case '23503': // foreign_key_violation
         return 'لا يمكن إتمام العملية لارتباط هذا السجل ببيانات أخرى في النظام';
+      case 'P0005':
+        if (_containsArabic(e.message)) return e.message.trim();
+        return 'لا يمكن إضافة أو تعديل أو حذف حركة مالية تقع ضمن فترة محاسبية مغلقة';
+      case 'P0006':
+        if (_containsArabic(e.message)) return e.message.trim();
+        return 'إجراء غير مسموح على الفترة المحاسبية — تأكد من التاريخ أو استخدم الإقفال الإجباري';
       case '42501': // insufficient_privilege
         return 'ليس لديك الصلاحيات الكافية لتنفيذ هذا الإجراء';
       case 'PGRST116': // JSON object requested, multiple or zero results

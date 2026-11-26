@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../domain/accounting_period_models.dart';
 import '../domain/accrual_models.dart';
 import '../domain/cohort_contribution_models.dart';
 import '../domain/financial_statement_models.dart';
@@ -68,6 +69,48 @@ class ReportsRepository {
     );
     final rows = List<Map<String, dynamic>>.from(response as List);
     return rows.map(CohortContributionRow.fromMap).toList();
+  }
+
+  // ─── Phase C7 Accounting Periods Closing & Guard ───
+  Future<List<AccountingPeriod>> getAccountingPeriods() async {
+    final response = await _client
+        .from('accounting_periods')
+        .select()
+        .order('period_month', ascending: false);
+    final rows = List<Map<String, dynamic>>.from(response as List);
+    return rows.map(AccountingPeriod.fromMap).toList();
+  }
+
+  Future<ClosePeriodResult> closeAccountingPeriod(
+    DateTime month, {
+    bool force = false,
+  }) async {
+    final firstDay = DateTime(month.year, month.month, 1);
+    final response = await _client.rpc(
+      'close_accounting_period',
+      params: {
+        'p_month': _formatDate(firstDay),
+        'p_force': force,
+      },
+    );
+    final map = Map<String, dynamic>.from(response as Map);
+    return ClosePeriodResult.fromMap(map);
+  }
+
+  Future<ReopenPeriodResult> reopenAccountingPeriod(
+    DateTime month,
+    String reason,
+  ) async {
+    final firstDay = DateTime(month.year, month.month, 1);
+    final response = await _client.rpc(
+      'reopen_accounting_period',
+      params: {
+        'p_month': _formatDate(firstDay),
+        'p_reason': reason,
+      },
+    );
+    final map = Map<String, dynamic>.from(response as Map);
+    return ReopenPeriodResult.fromMap(map);
   }
 
   // ─── Phase C4 Financial Statements (v3 RPCs) ───
@@ -337,4 +380,10 @@ final cohortContributionReportProvider =
     FutureProvider<List<CohortContributionRow>>((ref) {
   final asOf = ref.watch(cohortContributionAsOfDateProvider);
   return ref.watch(reportsRepositoryProvider).getCohortContributionReport(asOf);
+});
+
+// ─── Phase C7 Providers ───
+final accountingPeriodsProvider =
+    FutureProvider.autoDispose<List<AccountingPeriod>>((ref) {
+  return ref.watch(reportsRepositoryProvider).getAccountingPeriods();
 });

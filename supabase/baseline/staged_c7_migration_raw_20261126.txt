@@ -1,0 +1,636 @@
+-- ============================================================================
+-- Phase C7 — Accounting period closing (retroactive write lock)
+-- File: supabase/migrations/20261126000001_phase_c7_accounting_periods.sql
+--
+-- One row per calendar month on the Damascus business calendar. Closing a
+-- month freezes every business-dated money movement that falls inside it.
+--
+-- Objects:
+--   * accounting_periods           period state (admin SELECT only)
+--   * c7_period_guard()            one guard function for 17 triggers
+--   * close_accounting_period()    admin RPC, idempotent, audited
+--   * reopen_accounting_period()   admin RPC, mandatory written reason, audited
+--
+-- Guarded tables and their business date column (Damascus month):
+--   payments.paid_at
+--   payment_refunds.refunded_at
+--   fee_adjustments.adjusted_at
+--   expenses.expense_date
+--   enrollment_withdrawals.withdrawn_at
+--   account_transactions.occurred_at
+--   trainer_dues.period_end
+--   trainer_payments.paid_at
+--   payroll_runs.month
+--   payroll_lines (through payroll_runs.month)
+--   staff_advances.advanced_at
+--   staff_bonuses.bonus_month
+--   lab_invoices.issue_date
+--   lab_payments.paid_at
+--   lab_expenses.expense_date
+--   sessions.closed_at
+--   enrollments.enrolled_at (financial columns only)
+--
+-- Deliberate allowances inside a closed month:
+--   * trainer_dues   pending -> paid only (amount frozen by td_amount_ck)
+--   * payroll_runs   status moves forward only (draft -> approved -> paid)
+--   * staff_advances status-only updates (the grant cash already moved)
+--   * lab_invoices   recalculated paid_amount/status from current collections
+--   * enrollments    lifecycle changes, and discount REDUCTIONS on non-active
+--                    enrollments (pro-rata withdrawal settlement)
+--
+-- service_role is NOT exempt: the lock applies to every role. A genuine
+-- repair uses ALTER TABLE ... DISABLE TRIGGER explicitly and on purpose.
+--
+-- Not locked on purpose (planning / bookkeeping only, no cash or revenue
+-- recognition effect): installment_schedule, payment_allocations, referrals,
+-- staff_referrals, lab_invoice_items (a price change there is caught through
+-- recalculate_lab_invoice on lab_invoices).
+--
+-- Known limitation (documented, not fixed here): enrollments.discount_amount
+-- has no history table, so withdrawing from an old enrollment can still change
+-- what As-Of reports show for earlier months. Cash events stay immutable.
+--
+-- Validator impact: C01 +1 table, C03 +3 functions, C04 +1 policy,
+-- C05 +17 triggers, C06 +1 unique index, C09 +1 RLS table. C12 unchanged.
+--
+-- Rebuild-safe: IF NOT EXISTS / CREATE OR REPLACE / DROP TRIGGER IF EXISTS.
+-- ============================================================================
+BEGIN;
+BEGIN
+-- ----------------------------------------------------------------------------
+-- 1. Period table
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS public.accounting_periods (
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    period_month date NOT NULL UNIQUE,
+    status text NOT NULL DEFAULT 'open'
+        CHECK (status IN ('open', 'closed')),
+    closed_at timestamptz,
+    closed_by uuid REFERENCES auth.users(id),
+    reopened_at timestamptz,
+    reopened_by uuid REFERENCES auth.users(id),
+    reopen_reason text,
+    reopen_count integer NOT NULL DEFAULT 0 CHECK (reopen_count >= 0),
+    created_at timestamptz NOT NULL DEFAULT now(),
+    created_by uuid REFERENCES auth.users(id),
+    CONSTRAINT ap_month_first_day_ck
+        CHECK (period_month = date_trunc('month', period_month)::date),
+    CONSTRAINT ap_closed_fields_ck
+        CHECK (status = 'closed' OR (closed_at IS NULL AND closed_by IS NULL)),
+    CONSTRAINT ap_closed_audit_ck
+        CHECK ((status = 'closed') = (closed_at IS NOT NULL AND closed_by IS NOT NULL)),
+    CONSTRAINT ap_reopen_reason_ck
+        CHECK (reopen_reason IS NULL OR length(btrim(reopen_reason)) >= 10)
+);
+CREATE TABLE
+COMMENT ON TABLE public.accounting_periods IS
+  'C7 accounting periods. One row per Damascus calendar month; status closed blocks business-dated writes in that month via c7_period_guard().';
+COMMENT
+COMMENT ON COLUMN public.accounting_periods.reopen_reason IS
+  'Mandatory written justification (>= 10 chars) for reopening a closed month; mirrored into audit_log.';
+COMMENT
+ALTER TABLE public.accounting_periods ENABLE ROW LEVEL SECURITY;
+ALTER TABLE
+DROP POLICY IF EXISTS c7_admin_select ON public.accounting_periods;
+psql:supabase/migrations/20261126000001_phase_c7_accounting_periods.sql:94: NOTICE:  policy "c7_admin_select" for relation "public.accounting_periods" does not exist, skipping
+DROP POLICY
+CREATE POLICY c7_admin_select ON public.accounting_periods
+  FOR SELECT TO authenticated
+  USING (public.c1_is_admin());
+CREATE POLICY
+-- No INSERT/UPDATE/DELETE policy: periods change only through the two RPCs.
+GRANT SELECT ON TABLE public.accounting_periods TO authenticated;
+GRANT
+GRANT ALL ON TABLE public.accounting_periods TO service_role;
+GRANT
+-- ----------------------------------------------------------------------------
+-- 2. Guard function (one function, 17 triggers, per-table policy)
+-- ----------------------------------------------------------------------------
+CREATE OR REPLACE FUNCTION public.c7_period_guard()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, pg_temp
+AS $$
+DECLARE
+  v_col        text := COALESCE(TG_ARGV[0], '');
+  v_kind       text := COALESCE(TG_ARGV[1], 'ts');
+  v_policy     text := COALESCE(TG_ARGV[2], 'strict');
+  v_old_month  date;
+  v_new_month  date;
+  v_block      date;
+  v_old_closed boolean := false;
+  v_new_closed boolean := false;
+  v_fin_changed boolean := false;
+  v_rank_old   int;
+  v_rank_new   int;
+BEGIN
+  -- 1) Business month of OLD / NEW.
+  IF v_policy = 'payroll_lines' THEN
+    IF TG_OP IN ('UPDATE', 'DELETE') THEN
+      SELECT date_trunc('month', r.month)::date INTO v_old_month
+      FROM public.payroll_runs r WHERE r.id = OLD.run_id;
+    END IF;
+    IF TG_OP IN ('INSERT', 'UPDATE') THEN
+      SELECT date_trunc('month', r.month)::date INTO v_new_month
+      FROM public.payroll_runs r WHERE r.id = NEW.run_id;
+    END IF;
+  ELSIF v_policy = 'enrollments' THEN
+    IF TG_OP IN ('UPDATE', 'DELETE') THEN
+      v_old_month := date_trunc('month', (OLD.enrolled_at AT TIME ZONE 'Asia/Damascus'))::date;
+    END IF;
+    IF TG_OP IN ('INSERT', 'UPDATE') THEN
+      v_new_month := date_trunc('month', (NEW.enrolled_at AT TIME ZONE 'Asia/Damascus'))::date;
+    END IF;
+  ELSIF v_kind = 'date' THEN
+    IF TG_OP IN ('UPDATE', 'DELETE') THEN
+      v_old_month := date_trunc('month', (to_jsonb(OLD) ->> v_col)::date)::date;
+    END IF;
+    IF TG_OP IN ('INSERT', 'UPDATE') THEN
+      v_new_month := date_trunc('month', (to_jsonb(NEW) ->> v_col)::date)::date;
+    END IF;
+  ELSE
+    IF TG_OP IN ('UPDATE', 'DELETE') THEN
+      v_old_month := date_trunc('month',
+        ((to_jsonb(OLD) ->> v_col)::timestamptz AT TIME ZONE 'Asia/Damascus'))::date;
+    END IF;
+    IF TG_OP IN ('INSERT', 'UPDATE') THEN
+      v_new_month := date_trunc('month',
+        ((to_jsonb(NEW) ->> v_col)::timestamptz AT TIME ZONE 'Asia/Damascus'))::date;
+    END IF;
+  END IF;
+
+  IF v_old_month IS NULL AND v_new_month IS NULL THEN
+    IF TG_OP = 'DELETE' THEN
+      RETURN OLD;
+    END IF;
+    RETURN NEW;
+  END IF;
+
+  IF v_old_month IS NOT NULL THEN
+    SELECT EXISTS (
+      SELECT 1 FROM public.accounting_periods p
+      WHERE p.period_month = v_old_month AND p.status = 'closed'
+    ) INTO v_old_closed;
+  END IF;
+
+  IF v_new_month IS NOT NULL THEN
+    SELECT EXISTS (
+      SELECT 1 FROM public.accounting_periods p
+      WHERE p.period_month = v_new_month AND p.status = 'closed'
+    ) INTO v_new_closed;
+  END IF;
+
+  IF NOT COALESCE(v_old_closed, false) AND NOT COALESCE(v_new_closed, false) THEN
+    IF TG_OP = 'DELETE' THEN
+      RETURN OLD;
+    END IF;
+    RETURN NEW;
+  END IF;
+
+  -- 2) Deliberate allowances (same month only; moving rows between months is
+  --    never allowed out of a closed period).
+  IF TG_OP = 'UPDATE'
+     AND v_old_month IS NOT DISTINCT FROM v_new_month
+     AND COALESCE(v_new_closed, false) THEN
+
+    IF v_policy = 'trainer_dues' THEN
+      IF OLD.status = 'pending' AND NEW.status = 'paid'
+         AND NEW.amount          IS NOT DISTINCT FROM OLD.amount
+         AND NEW.basis_amount    IS NOT DISTINCT FROM OLD.basis_amount
+         AND NEW.rate_percent    IS NOT DISTINCT FROM OLD.rate_percent
+         AND NEW.period_start    IS NOT DISTINCT FROM OLD.period_start
+         AND NEW.period_end      IS NOT DISTINCT FROM OLD.period_end
+         AND NEW.currency        IS NOT DISTINCT FROM OLD.currency
+         AND NEW.cohort_id       IS NOT DISTINCT FROM OLD.cohort_id
+         AND NEW.trainer_id      IS NOT DISTINCT FROM OLD.trainer_id
+      THEN
+        RETURN NEW;
+      END IF;
+
+    ELSIF v_policy = 'payroll_runs' THEN
+      v_rank_old := CASE OLD.status WHEN 'draft' THEN 1 WHEN 'approved' THEN 2 ELSE 3 END;
+      v_rank_new := CASE NEW.status WHEN 'draft' THEN 1 WHEN 'approved' THEN 2 ELSE 3 END;
+      IF v_rank_new >= v_rank_old
+         AND NEW.month IS NOT DISTINCT FROM OLD.month
+      THEN
+        RETURN NEW;
+      END IF;
+
+    ELSIF v_policy = 'staff_advances' THEN
+      IF NEW.user_id      IS NOT DISTINCT FROM OLD.user_id
+         AND NEW.amount     IS NOT DISTINCT FROM OLD.amount
+         AND NEW.currency   IS NOT DISTINCT FROM OLD.currency
+         AND NEW.advanced_at IS NOT DISTINCT FROM OLD.advanced_at
+         AND NEW.account_id IS NOT DISTINCT FROM OLD.account_id
+      THEN
+        RETURN NEW;
+      END IF;
+
+    ELSIF v_policy = 'lab_invoices' THEN
+      IF NEW.issue_date   IS NOT DISTINCT FROM OLD.issue_date
+         AND NEW.subtotal    IS NOT DISTINCT FROM OLD.subtotal
+         AND NEW.discount    IS NOT DISTINCT FROM OLD.discount
+         AND NEW.total_amount IS NOT DISTINCT FROM OLD.total_amount
+         AND NEW.currency    IS NOT DISTINCT FROM OLD.currency
+         AND NOT (NEW.status = 'cancelled' AND OLD.status IS DISTINCT FROM 'cancelled')
+      THEN
+        RETURN NEW;
+      END IF;
+
+    ELSIF v_policy = 'enrollments' THEN
+      IF NEW.enrolled_at IS NOT DISTINCT FROM OLD.enrolled_at THEN
+        v_fin_changed :=
+             NEW.total_due               IS DISTINCT FROM OLD.total_due
+          OR NEW.discount_amount         IS DISTINCT FROM OLD.discount_amount
+          OR COALESCE(NEW.referral_discount_amount, 0)
+             <> COALESCE(OLD.referral_discount_amount, 0)
+          OR NEW.currency                IS DISTINCT FROM OLD.currency;
+
+        IF NOT v_fin_changed THEN
+          RETURN NEW;
+        END IF;
+
+        IF (OLD.lifecycle_status <> 'active' OR NEW.lifecycle_status <> 'active')
+           AND NEW.discount_amount <= OLD.discount_amount
+           AND COALESCE(NEW.referral_discount_amount, 0)
+               <= COALESCE(OLD.referral_discount_amount, 0)
+        THEN
+          RETURN NEW;
+        END IF;
+      END IF;
+    END IF;
+  END IF;
+
+  -- 3) Everything else is a retroactive change: reject.
+  v_block := COALESCE(v_new_month, v_old_month);
+  RAISE EXCEPTION
+    'لا يمكن إضافة أو تعديل أو حذف حركة مالية تقع ضمن فترة محاسبية مغلقة [%]',
+    to_char(v_block, 'YYYY-MM')
+    USING ERRCODE = 'P0005',
+          DETAIL = format('table=%s op=%s old_month=%s new_month=%s',
+                          TG_TABLE_NAME, TG_OP, v_old_month, v_new_month),
+          HINT = 'أعد فتح الفترة بمسوّغ موثّق (reopen_accounting_period) أو سجّل تسوية في الشهر الحالي';
+END;
+$$;
+CREATE FUNCTION
+COMMENT ON FUNCTION public.c7_period_guard() IS
+  'C7 write lock. Rejects business-dated changes inside a closed month (P0005). TG_ARGV: [0]=date column, [1]=ts|date, [2]=policy.';
+COMMENT
+-- Trigger-only function: no role may call it directly.
+REVOKE ALL ON FUNCTION public.c7_period_guard() FROM PUBLIC, anon, authenticated, service_role;
+REVOKE
+-- ----------------------------------------------------------------------------
+-- 3. Attach the guard (17 triggers)
+-- ----------------------------------------------------------------------------
+DROP TRIGGER IF EXISTS trg_c7_guard_payments ON public.payments;
+psql:supabase/migrations/20261126000001_phase_c7_accounting_periods.sql:283: NOTICE:  trigger "trg_c7_guard_payments" for relation "public.payments" does not exist, skipping
+DROP TRIGGER
+CREATE TRIGGER trg_c7_guard_payments
+  BEFORE INSERT OR UPDATE OR DELETE ON public.payments
+  FOR EACH ROW EXECUTE FUNCTION public.c7_period_guard('paid_at', 'ts', 'strict');
+CREATE TRIGGER
+DROP TRIGGER IF EXISTS trg_c7_guard_payment_refunds ON public.payment_refunds;
+psql:supabase/migrations/20261126000001_phase_c7_accounting_periods.sql:288: NOTICE:  trigger "trg_c7_guard_payment_refunds" for relation "public.payment_refunds" does not exist, skipping
+DROP TRIGGER
+CREATE TRIGGER trg_c7_guard_payment_refunds
+  BEFORE INSERT OR UPDATE OR DELETE ON public.payment_refunds
+  FOR EACH ROW EXECUTE FUNCTION public.c7_period_guard('refunded_at', 'ts', 'strict');
+CREATE TRIGGER
+DROP TRIGGER IF EXISTS trg_c7_guard_fee_adjustments ON public.fee_adjustments;
+psql:supabase/migrations/20261126000001_phase_c7_accounting_periods.sql:293: NOTICE:  trigger "trg_c7_guard_fee_adjustments" for relation "public.fee_adjustments" does not exist, skipping
+DROP TRIGGER
+CREATE TRIGGER trg_c7_guard_fee_adjustments
+  BEFORE INSERT OR UPDATE OR DELETE ON public.fee_adjustments
+  FOR EACH ROW EXECUTE FUNCTION public.c7_period_guard('adjusted_at', 'ts', 'strict');
+CREATE TRIGGER
+DROP TRIGGER IF EXISTS trg_c7_guard_expenses ON public.expenses;
+psql:supabase/migrations/20261126000001_phase_c7_accounting_periods.sql:298: NOTICE:  trigger "trg_c7_guard_expenses" for relation "public.expenses" does not exist, skipping
+DROP TRIGGER
+CREATE TRIGGER trg_c7_guard_expenses
+  BEFORE INSERT OR UPDATE OR DELETE ON public.expenses
+  FOR EACH ROW EXECUTE FUNCTION public.c7_period_guard('expense_date', 'date', 'strict');
+CREATE TRIGGER
+DROP TRIGGER IF EXISTS trg_c7_guard_enrollment_withdrawals ON public.enrollment_withdrawals;
+psql:supabase/migrations/20261126000001_phase_c7_accounting_periods.sql:303: NOTICE:  trigger "trg_c7_guard_enrollment_withdrawals" for relation "public.enrollment_withdrawals" does not exist, skipping
+DROP TRIGGER
+CREATE TRIGGER trg_c7_guard_enrollment_withdrawals
+  BEFORE INSERT OR UPDATE OR DELETE ON public.enrollment_withdrawals
+  FOR EACH ROW EXECUTE FUNCTION public.c7_period_guard('withdrawn_at', 'ts', 'strict');
+CREATE TRIGGER
+DROP TRIGGER IF EXISTS trg_c7_guard_account_transactions ON public.account_transactions;
+psql:supabase/migrations/20261126000001_phase_c7_accounting_periods.sql:308: NOTICE:  trigger "trg_c7_guard_account_transactions" for relation "public.account_transactions" does not exist, skipping
+DROP TRIGGER
+CREATE TRIGGER trg_c7_guard_account_transactions
+  BEFORE INSERT OR UPDATE OR DELETE ON public.account_transactions
+  FOR EACH ROW EXECUTE FUNCTION public.c7_period_guard('occurred_at', 'ts', 'strict');
+CREATE TRIGGER
+DROP TRIGGER IF EXISTS trg_c7_guard_trainer_dues ON public.trainer_dues;
+psql:supabase/migrations/20261126000001_phase_c7_accounting_periods.sql:313: NOTICE:  trigger "trg_c7_guard_trainer_dues" for relation "public.trainer_dues" does not exist, skipping
+DROP TRIGGER
+CREATE TRIGGER trg_c7_guard_trainer_dues
+  BEFORE INSERT OR UPDATE OR DELETE ON public.trainer_dues
+  FOR EACH ROW EXECUTE FUNCTION public.c7_period_guard('period_end', 'date', 'trainer_dues');
+CREATE TRIGGER
+DROP TRIGGER IF EXISTS trg_c7_guard_trainer_payments ON public.trainer_payments;
+psql:supabase/migrations/20261126000001_phase_c7_accounting_periods.sql:318: NOTICE:  trigger "trg_c7_guard_trainer_payments" for relation "public.trainer_payments" does not exist, skipping
+DROP TRIGGER
+CREATE TRIGGER trg_c7_guard_trainer_payments
+  BEFORE INSERT OR UPDATE OR DELETE ON public.trainer_payments
+  FOR EACH ROW EXECUTE FUNCTION public.c7_period_guard('paid_at', 'ts', 'strict');
+CREATE TRIGGER
+DROP TRIGGER IF EXISTS trg_c7_guard_payroll_runs ON public.payroll_runs;
+psql:supabase/migrations/20261126000001_phase_c7_accounting_periods.sql:323: NOTICE:  trigger "trg_c7_guard_payroll_runs" for relation "public.payroll_runs" does not exist, skipping
+DROP TRIGGER
+CREATE TRIGGER trg_c7_guard_payroll_runs
+  BEFORE INSERT OR UPDATE OR DELETE ON public.payroll_runs
+  FOR EACH ROW EXECUTE FUNCTION public.c7_period_guard('month', 'date', 'payroll_runs');
+CREATE TRIGGER
+DROP TRIGGER IF EXISTS trg_c7_guard_payroll_lines ON public.payroll_lines;
+psql:supabase/migrations/20261126000001_phase_c7_accounting_periods.sql:328: NOTICE:  trigger "trg_c7_guard_payroll_lines" for relation "public.payroll_lines" does not exist, skipping
+DROP TRIGGER
+CREATE TRIGGER trg_c7_guard_payroll_lines
+  BEFORE INSERT OR UPDATE OR DELETE ON public.payroll_lines
+  FOR EACH ROW EXECUTE FUNCTION public.c7_period_guard('', 'date', 'payroll_lines');
+CREATE TRIGGER
+DROP TRIGGER IF EXISTS trg_c7_guard_staff_advances ON public.staff_advances;
+psql:supabase/migrations/20261126000001_phase_c7_accounting_periods.sql:333: NOTICE:  trigger "trg_c7_guard_staff_advances" for relation "public.staff_advances" does not exist, skipping
+DROP TRIGGER
+CREATE TRIGGER trg_c7_guard_staff_advances
+  BEFORE INSERT OR UPDATE OR DELETE ON public.staff_advances
+  FOR EACH ROW EXECUTE FUNCTION public.c7_period_guard('advanced_at', 'date', 'staff_advances');
+CREATE TRIGGER
+DROP TRIGGER IF EXISTS trg_c7_guard_staff_bonuses ON public.staff_bonuses;
+psql:supabase/migrations/20261126000001_phase_c7_accounting_periods.sql:338: NOTICE:  trigger "trg_c7_guard_staff_bonuses" for relation "public.staff_bonuses" does not exist, skipping
+DROP TRIGGER
+CREATE TRIGGER trg_c7_guard_staff_bonuses
+  BEFORE INSERT OR UPDATE OR DELETE ON public.staff_bonuses
+  FOR EACH ROW EXECUTE FUNCTION public.c7_period_guard('bonus_month', 'date', 'strict');
+CREATE TRIGGER
+DROP TRIGGER IF EXISTS trg_c7_guard_lab_invoices ON public.lab_invoices;
+psql:supabase/migrations/20261126000001_phase_c7_accounting_periods.sql:343: NOTICE:  trigger "trg_c7_guard_lab_invoices" for relation "public.lab_invoices" does not exist, skipping
+DROP TRIGGER
+CREATE TRIGGER trg_c7_guard_lab_invoices
+  BEFORE INSERT OR UPDATE OR DELETE ON public.lab_invoices
+  FOR EACH ROW EXECUTE FUNCTION public.c7_period_guard('issue_date', 'date', 'lab_invoices');
+CREATE TRIGGER
+DROP TRIGGER IF EXISTS trg_c7_guard_lab_payments ON public.lab_payments;
+psql:supabase/migrations/20261126000001_phase_c7_accounting_periods.sql:348: NOTICE:  trigger "trg_c7_guard_lab_payments" for relation "public.lab_payments" does not exist, skipping
+DROP TRIGGER
+CREATE TRIGGER trg_c7_guard_lab_payments
+  BEFORE INSERT OR UPDATE OR DELETE ON public.lab_payments
+  FOR EACH ROW EXECUTE FUNCTION public.c7_period_guard('paid_at', 'ts', 'strict');
+CREATE TRIGGER
+DROP TRIGGER IF EXISTS trg_c7_guard_lab_expenses ON public.lab_expenses;
+psql:supabase/migrations/20261126000001_phase_c7_accounting_periods.sql:353: NOTICE:  trigger "trg_c7_guard_lab_expenses" for relation "public.lab_expenses" does not exist, skipping
+DROP TRIGGER
+CREATE TRIGGER trg_c7_guard_lab_expenses
+  BEFORE INSERT OR UPDATE OR DELETE ON public.lab_expenses
+  FOR EACH ROW EXECUTE FUNCTION public.c7_period_guard('expense_date', 'date', 'strict');
+CREATE TRIGGER
+DROP TRIGGER IF EXISTS trg_c7_guard_sessions ON public.sessions;
+psql:supabase/migrations/20261126000001_phase_c7_accounting_periods.sql:358: NOTICE:  trigger "trg_c7_guard_sessions" for relation "public.sessions" does not exist, skipping
+DROP TRIGGER
+CREATE TRIGGER trg_c7_guard_sessions
+  BEFORE INSERT OR UPDATE OR DELETE ON public.sessions
+  FOR EACH ROW EXECUTE FUNCTION public.c7_period_guard('closed_at', 'ts', 'strict');
+CREATE TRIGGER
+DROP TRIGGER IF EXISTS trg_c7_guard_enrollments ON public.enrollments;
+psql:supabase/migrations/20261126000001_phase_c7_accounting_periods.sql:363: NOTICE:  trigger "trg_c7_guard_enrollments" for relation "public.enrollments" does not exist, skipping
+DROP TRIGGER
+CREATE TRIGGER trg_c7_guard_enrollments
+  BEFORE INSERT OR UPDATE OR DELETE ON public.enrollments
+  FOR EACH ROW EXECUTE FUNCTION public.c7_period_guard('enrolled_at', 'ts', 'enrollments');
+CREATE TRIGGER
+-- ----------------------------------------------------------------------------
+-- 4. Close RPC
+-- ----------------------------------------------------------------------------
+CREATE OR REPLACE FUNCTION public.close_accounting_period(
+  p_month date,
+  p_force boolean DEFAULT false
+) RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, pg_temp
+AS $$
+DECLARE
+  v_uid            uuid := auth.uid();
+  v_month          date;
+  v_current_month  date := date_trunc('month', (now() AT TIME ZONE 'Asia/Damascus')::date)::date;
+  v_existing       public.accounting_periods%ROWTYPE;
+  v_period_id      uuid;
+  v_has_collections boolean := false;
+  v_dues_rows      bigint := 0;
+  v_draft_runs     bigint := 0;
+  v_open_sessions  bigint := 0;
+  v_status         text;
+BEGIN
+  IF NOT public.c1_is_admin() THEN
+    RAISE EXCEPTION 'غير مصرّح: إقفال الفترات المحاسبية متاح لمدير المركز فقط'
+      USING ERRCODE = 'P0001';
+  END IF;
+
+  IF p_month IS NULL THEN
+    RAISE EXCEPTION 'تاريخ الفترة مطلوب' USING ERRCODE = 'P0002';
+  END IF;
+
+  v_month := date_trunc('month', p_month)::date;
+  IF v_month <> p_month THEN
+    RAISE EXCEPTION 'تاريخ الفترة يجب أن يكون أول الشهر [%]',
+      to_char(v_month, 'YYYY-MM') USING ERRCODE = 'P0006';
+  END IF;
+
+  IF v_month >= v_current_month AND NOT p_force THEN
+    RAISE EXCEPTION 'لا يمكن إقفال الشهر الجاري [%] أو شهر مستقبلي بلا p_force=true',
+      to_char(v_month, 'YYYY-MM') USING ERRCODE = 'P0006';
+  END IF;
+
+  SELECT * INTO v_existing
+  FROM public.accounting_periods
+  WHERE period_month = v_month
+  FOR UPDATE;
+
+  IF FOUND AND v_existing.status = 'closed' THEN
+    RETURN jsonb_build_object(
+      'status', 'already_closed',
+      'period_month', to_char(v_month, 'YYYY-MM')
+    );
+  END IF;
+
+  -- Pre-close safety: do not freeze a month whose inputs were never generated.
+  SELECT EXISTS (
+    SELECT 1 FROM public.payments p
+    WHERE date_trunc('month', (p.paid_at AT TIME ZONE 'Asia/Damascus'))::date = v_month
+  ) OR EXISTS (
+    SELECT 1 FROM public.lab_payments lp
+    WHERE date_trunc('month', (lp.paid_at AT TIME ZONE 'Asia/Damascus'))::date = v_month
+  ) INTO v_has_collections;
+
+  SELECT count(*) INTO v_dues_rows
+  FROM public.trainer_dues td
+  WHERE date_trunc('month', td.period_end)::date = v_month;
+
+  SELECT count(*) INTO v_draft_runs
+  FROM public.payroll_runs pr
+  WHERE pr.month = v_month AND pr.status = 'draft';
+
+  SELECT count(*) INTO v_open_sessions
+  FROM public.sessions s
+  WHERE date_trunc('month', (s.scheduled_at AT TIME ZONE 'Asia/Damascus'))::date = v_month
+    AND s.status IN ('scheduled', 'open');
+
+  IF NOT p_force AND v_has_collections AND v_dues_rows = 0 THEN
+    RAISE EXCEPTION
+      'لا يمكن إقفال [%]: توجد تحصيلات بلا أي أتعاب مدربين مولّدة لهذا الشهر؛ ولّد الأتعاب أو اعتمد p_force=true',
+      to_char(v_month, 'YYYY-MM') USING ERRCODE = 'P0006';
+  END IF;
+
+  IF NOT p_force AND v_draft_runs > 0 THEN
+    RAISE EXCEPTION
+      'لا يمكن إقفال [%]: مسير رواتب مسودّة=% لهذا الشهر؛ اعتمده أو اعتمد p_force=true',
+      to_char(v_month, 'YYYY-MM'), v_draft_runs USING ERRCODE = 'P0006';
+  END IF;
+
+  IF v_existing.id IS NULL THEN
+    INSERT INTO public.accounting_periods
+      (period_month, status, closed_at, closed_by, created_by)
+    VALUES
+      (v_month, 'closed', now(), v_uid, v_uid)
+    RETURNING id INTO v_period_id;
+    v_status := 'closed';
+  ELSE
+    UPDATE public.accounting_periods
+    SET status = 'closed', closed_at = now(), closed_by = v_uid
+    WHERE id = v_existing.id;
+    v_period_id := v_existing.id;
+    v_status := 'reclosed';
+  END IF;
+
+  INSERT INTO public.audit_log
+    (table_name, operation, record_id, old_data, new_data,
+     performed_by, actor_source, actor_role)
+  VALUES
+    ('accounting_periods', 'CLOSE', v_period_id,
+     CASE WHEN v_existing.id IS NULL THEN NULL ELSE to_jsonb(v_existing) END,
+     jsonb_build_object(
+       'period_month', to_char(v_month, 'YYYY-MM'),
+       'forced', p_force,
+       'has_collections', v_has_collections,
+       'dues_rows', v_dues_rows,
+       'draft_runs', v_draft_runs,
+       'open_sessions', v_open_sessions
+     ),
+     v_uid, 'rpc_context', 'admin');
+
+  RETURN jsonb_build_object(
+    'status', v_status,
+    'period_month', to_char(v_month, 'YYYY-MM'),
+    'forced', p_force,
+    'has_collections', v_has_collections,
+    'dues_rows', v_dues_rows,
+    'draft_runs', v_draft_runs,
+    'open_sessions', v_open_sessions
+  );
+END;
+$$;
+CREATE FUNCTION
+COMMENT ON FUNCTION public.close_accounting_period(date, boolean) IS
+  'C7 closes a Damascus calendar month (admin only). Idempotent; blocks the current/future month and ungenerated trainer dues unless p_force. Writes audit_log.';
+COMMENT
+-- ----------------------------------------------------------------------------
+-- 5. Reopen RPC
+-- ----------------------------------------------------------------------------
+CREATE OR REPLACE FUNCTION public.reopen_accounting_period(
+  p_month date,
+  p_reason text
+) RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, pg_temp
+AS $$
+DECLARE
+  v_uid    uuid := auth.uid();
+  v_month  date;
+  v_reason text := NULLIF(btrim(COALESCE(p_reason, '')), '');
+  v_row    public.accounting_periods%ROWTYPE;
+  v_old    jsonb;
+BEGIN
+  IF NOT public.c1_is_admin() THEN
+    RAISE EXCEPTION 'غير مصرّح: إعادة فتح الفترات المحاسبية متاحة لمدير المركز فقط'
+      USING ERRCODE = 'P0001';
+  END IF;
+
+  IF p_month IS NULL THEN
+    RAISE EXCEPTION 'تاريخ الفترة مطلوب' USING ERRCODE = 'P0002';
+  END IF;
+
+  v_month := date_trunc('month', p_month)::date;
+  IF v_month <> p_month THEN
+    RAISE EXCEPTION 'تاريخ الفترة يجب أن يكون أول الشهر [%]',
+      to_char(v_month, 'YYYY-MM') USING ERRCODE = 'P0006';
+  END IF;
+
+  IF v_reason IS NULL OR length(v_reason) < 10 THEN
+    RAISE EXCEPTION 'مسوّغ إعادة الفتح مطلوب (10 أحرف على الأقل)'
+      USING ERRCODE = 'P0006';
+  END IF;
+
+  SELECT * INTO v_row
+  FROM public.accounting_periods
+  WHERE period_month = v_month
+  FOR UPDATE;
+
+  IF NOT FOUND OR v_row.status <> 'closed' THEN
+    RAISE EXCEPTION 'الفترة [%] غير مقفلة؛ لا شيء لإعادة فتحه',
+      to_char(v_month, 'YYYY-MM') USING ERRCODE = 'P0006';
+  END IF;
+
+  v_old := to_jsonb(v_row);
+
+  UPDATE public.accounting_periods
+  SET status = 'open',
+      closed_at = NULL,
+      closed_by = NULL,
+      reopened_at = now(),
+      reopened_by = v_uid,
+      reopen_reason = v_reason,
+      reopen_count = reopen_count + 1
+  WHERE id = v_row.id;
+
+  INSERT INTO public.audit_log
+    (table_name, operation, record_id, old_data, new_data,
+     performed_by, actor_source, actor_role)
+  VALUES
+    ('accounting_periods', 'REOPEN', v_row.id, v_old,
+     jsonb_build_object(
+       'period_month', to_char(v_month, 'YYYY-MM'),
+       'reason', v_reason,
+       'reopen_count', v_row.reopen_count + 1
+     ),
+     v_uid, 'rpc_context', 'admin');
+
+  RETURN jsonb_build_object(
+    'status', 'reopened',
+    'period_month', to_char(v_month, 'YYYY-MM'),
+    'reopen_count', v_row.reopen_count + 1,
+    'reason', v_reason
+  );
+END;
+$$;
+CREATE FUNCTION
+COMMENT ON FUNCTION public.reopen_accounting_period(date, text) IS
+  'C7 reopens a closed month (admin only, written reason >= 10 chars, audited, reopen_count++).';
+COMMENT
+-- ----------------------------------------------------------------------------
+-- 6. Privileges
+-- ----------------------------------------------------------------------------
+REVOKE ALL ON FUNCTION public.close_accounting_period(date, boolean) FROM PUBLIC, anon;
+REVOKE
+REVOKE ALL ON FUNCTION public.reopen_accounting_period(date, text) FROM PUBLIC, anon;
+REVOKE
+GRANT EXECUTE ON FUNCTION public.close_accounting_period(date, boolean) TO authenticated, service_role;
+GRANT
+GRANT EXECUTE ON FUNCTION public.reopen_accounting_period(date, text) TO authenticated, service_role;
+GRANT
+COMMIT;
+COMMIT

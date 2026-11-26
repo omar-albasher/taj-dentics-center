@@ -11,6 +11,7 @@ import 'package:file_saver/file_saver.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../data/reports_repository.dart';
+import 'accounting_periods_screen.dart';
 import 'widgets/accrual_reports_tab.dart';
 import 'widgets/cohort_contribution_tab.dart';
 import 'widgets/financial_statements_tab.dart';
@@ -79,7 +80,7 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen>
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Header with Currency Switcher
+            // Header with Currency Switcher and Accounting Periods Button
             Row(
               children: [
                 Text(
@@ -90,6 +91,29 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen>
                     color: AppColors.gold,
                     fontFamily: 'Cairo',
                   ),
+                ),
+                const SizedBox(width: 16),
+                OutlinedButton.icon(
+                  icon: const Icon(Icons.lock_clock_outlined, color: AppColors.gold, size: 18),
+                  label: const Text(
+                    'إقفال الفترات (C7)',
+                    style: TextStyle(
+                      color: AppColors.gold,
+                      fontFamily: 'Cairo',
+                      fontWeight: FontWeight.bold,
+                      fontSize: 13,
+                    ),
+                  ),
+                  style: OutlinedButton.styleFrom(
+                    side: const BorderSide(color: AppColors.gold),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                  ),
+                  onPressed: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(builder: (_) => const AccountingPeriodsScreen()),
+                    );
+                  },
                 ),
                 const Spacer(),
                 Container(
