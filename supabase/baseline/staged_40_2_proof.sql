@@ -118,11 +118,16 @@ DO $$
 BEGIN
   BEGIN
     UPDATE public.users
-       SET must_change_password = true, password_fingerprint = NULL
+       SET must_change_password = true,
+           must_change_password_at = now(),
+           password_fingerprint = NULL
      WHERE id = (SELECT uid FROM _proof40_2_ctx);
     RAISE EXCEPTION 'T0b FAIL: flag raised without fingerprint';
   EXCEPTION WHEN check_violation THEN
-    RAISE NOTICE 'T0b PASS: rejected (%)', SQLERRM;
+    IF SQLERRM NOT LIKE '%chk_users_must_change_password_fingerprint%' THEN
+      RAISE EXCEPTION 'T0b FAIL: expected fingerprint constraint violation, got: %', SQLERRM;
+    END IF;
+    RAISE NOTICE 'T0b PASS: rejected by fingerprint constraint (%)', SQLERRM;
   END;
 END $$;
 
