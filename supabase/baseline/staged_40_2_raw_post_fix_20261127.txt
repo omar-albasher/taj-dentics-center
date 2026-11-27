@@ -1,0 +1,60 @@
+BEGIN
+CREATE TABLE
+INSERT 0 1
+DELETE 0
+DELETE 0
+--- T0: constraints ---
+psql:d:/flutter-projects/admin_dashboard/supabase/baseline/staged_40_2_proof.sql:50: NOTICE:  T0 PASS: both CHECK constraints present
+DO
+--- T0c: no pre-fix placeholder fingerprints ---
+psql:d:/flutter-projects/admin_dashboard/supabase/baseline/staged_40_2_proof.sql:64: NOTICE:  T0c PASS: no placeholder fingerprints
+DO
+--- T1: function ACL matrix ---
+psql:d:/flutter-projects/admin_dashboard/supabase/baseline/staged_40_2_proof.sql:85: NOTICE:  T1 PASS: setter=service_role only; complete/get_state=authenticated+service
+DO
+--- Setup: test auth user + jwt sub ---
+INSERT 0 1
+--- T2: fail-closed state while public.users row is missing ---
+psql:d:/flutter-projects/admin_dashboard/supabase/baseline/staged_40_2_proof.sql:110: NOTICE:  T2 PASS: TRUE with real jwt sub and missing users row
+DO
+INSERT 0 1
+--- T0b: CHECK blocks flag without fingerprint ---
+psql:d:/flutter-projects/admin_dashboard/supabase/baseline/staged_40_2_proof.sql:127: NOTICE:  T0b PASS: rejected (new row for relation "users" violates check constraint "chk_users_must_change_password_at")
+DO
+--- T3: setter stores the fingerprint ---
+psql:d:/flutter-projects/admin_dashboard/supabase/baseline/staged_40_2_proof.sql:152: NOTICE:  T3 PASS: fingerprint 31e3411d008b29fa68ff636be580573332e73849693b65c99889d518597d9328
+DO
+--- T4: GoTrue sign-in bump must not clear the flag ---
+psql:d:/flutter-projects/admin_dashboard/supabase/baseline/staged_40_2_proof.sql:168: NOTICE:  T4 PASS: rejected (لم يتم تغيير كلمة المرور بعد)
+DO
+--- T5: real password change clears everything ---
+psql:d:/flutter-projects/admin_dashboard/supabase/baseline/staged_40_2_proof.sql:194: NOTICE:  T5 PASS: flag, fingerprint and timestamp cleared
+DO
+--- T6: missing fingerprint is fail-closed ---
+ALTER TABLE
+psql:d:/flutter-projects/admin_dashboard/supabase/baseline/staged_40_2_proof.sql:220: NOTICE:  T6 PASS: rejected (بصمة كلمة المرور مفقودة؛ يرجى مراجعة الإدارة)
+DO
+ALTER TABLE
+--- T7: authenticated cannot clear its own flag ---
+psql:d:/flutter-projects/admin_dashboard/supabase/baseline/staged_40_2_proof.sql:254: NOTICE:  T7 PASS: RLS denied the self-update; flag intact
+DO
+--- Cleanup + residue check ---
+ set_config 
+------------
+ 
+(1 row)
+
+DELETE 6
+DELETE 1
+DELETE 1
+ residue_public_users 
+----------------------
+                    0
+(1 row)
+
+ residue_auth_users 
+--------------------
+                  0
+(1 row)
+
+ROLLBACK

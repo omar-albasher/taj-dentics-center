@@ -6,14 +6,6 @@ const corsHeaders = {
 }
 
 const ALLOWED_ROLES = ['trainee', 'reception', 'admin']
-// العلامة تُشتق من ساعة GoTrue نفسها + هامش، فلا يمكن إسقاطها دون تغيير فعلي لاحق
-const FLAG_MARGIN_MS = 2000
-
-const flaggedTimestamp = (authUpdatedAt?: string | null) => {
-  const base = authUpdatedAt ? Date.parse(authUpdatedAt) : NaN
-  const ts = Number.isFinite(base) ? base : Date.now()
-  return new Date(ts + FLAG_MARGIN_MS).toISOString()
-}
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -88,7 +80,7 @@ Deno.serve(async (req) => {
 
     const userId = newUser.user.id
 
-    // إدراج المستخدم في جدول public.users
+    // إدراج المستخدم في جدول public.users (تُدرج must_change_password مبدئياً كـ false لتلبية قيود DB)
     const { error: userInsertError } = await supabaseAdmin.from('users').insert({
       id: userId,
       email,
@@ -96,15 +88,27 @@ Deno.serve(async (req) => {
       phone: phone ?? null,
       role: requestedRole,
       is_active: true,
-      must_change_password: requestedRole === 'trainee',
-      must_change_password_at:
-        requestedRole === 'trainee' ? flaggedTimestamp(newUser.user.updated_at) : null
+      must_change_password: false,
     })
 
     if (userInsertError) {
       console.error('users insert failed:', userInsertError.message)
       await supabaseAdmin.auth.admin.deleteUser(userId).catch((e) => console.error('cleanup failed:', e))
       return json({ error: 'تعذر إكمال إنشاء المستخدم' }, 400)
+    }
+
+    // إذا كان الدور متدرباً، يتم تفعيل إجبار التغيير وتسجيل بصمة كلمة المرور خادمياً
+    if (requestedRole === 'trainee') {
+      const { error: flagError } = await supabaseAdmin.rpc('set_user_must_change_password', {
+        p_user_id: userId,
+      })
+
+      if (flagError) {
+        console.error('set_user_must_change_password failed:', flagError.message)
+        await supabaseAdmin.from('users').delete().eq('id', userId)
+        await supabaseAdmin.auth.admin.deleteUser(userId).catch((e) => console.error('cleanup failed:', e))
+        return json({ error: 'تعذر ضبط علامة إجبار تغيير كلمة المرور' }, 400)
+      }
     }
 
     // إنشاء ملف تدريبي في جدول trainees فقط إذا كان الدور متدرباً

@@ -1,0 +1,44 @@
+================================================================
+Scope #40.2 Live Behavioral Verification on Secondary Database
+Target: pjtgwaxdjtvdzvoazkxv (PostgreSQL 17)
+Timestamp: 2026-11-27 UTC
+================================================================
+BEGIN
+--- 1. Schema & Constraints Verification ---
+                  conname                   |                               pg_get_constraintdef                                
+--------------------------------------------+-----------------------------------------------------------------------------------
+ chk_users_must_change_password_at          | CHECK (((must_change_password = false) OR (must_change_password_at IS NOT NULL)))
+ chk_users_must_change_password_fingerprint | CHECK (((must_change_password = false) OR (password_fingerprint IS NOT NULL)))
+(2 rows)
+
+--- 2. Security Definier & Permissions Verification ---
+            proname            | prosecdef | provolatile | anon_exec | auth_exec | service_exec 
+-------------------------------+-----------+-------------+-----------+-----------+--------------
+ complete_password_change      | t         | v           | f         | t         | t
+ get_my_password_state         | t         | v           | f         | t         | t
+ set_user_must_change_password | t         | v           | f         | f         | t
+(3 rows)
+
+--- 3. Test Setup: Creating Test User in auth.users and public.users ---
+psql:C:/Users/omar/.gemini/antigravity/brain/2668add9-6e6f-4ea3-a4bd-0236d3d761c7/scratch/test_scope_40_2_proof.sql:175: NOTICE:  Step 3: Test user created successfully
+psql:C:/Users/omar/.gemini/antigravity/brain/2668add9-6e6f-4ea3-a4bd-0236d3d761c7/scratch/test_scope_40_2_proof.sql:175: NOTICE:  Test 1 PASS: get_my_password_state returned TRUE (fail-closed) for nonexistent user
+psql:C:/Users/omar/.gemini/antigravity/brain/2668add9-6e6f-4ea3-a4bd-0236d3d761c7/scratch/test_scope_40_2_proof.sql:175: NOTICE:  Test 2 PASS: set_user_must_change_password correctly flagged user with fingerprint: 3e8f522a1a16d73c27ba63f6aacc69ba4b040a2dffab658068aef58a5f1cf3ae
+psql:C:/Users/omar/.gemini/antigravity/brain/2668add9-6e6f-4ea3-a4bd-0236d3d761c7/scratch/test_scope_40_2_proof.sql:175: NOTICE:  Test 3 PASS (Case 1 / GoTrue Fix): Login bumped updated_at, but complete_password_change was REJECTED with: "لم يتم تغيير كلمة المرور بعد"
+psql:C:/Users/omar/.gemini/antigravity/brain/2668add9-6e6f-4ea3-a4bd-0236d3d761c7/scratch/test_scope_40_2_proof.sql:175: NOTICE:  Test 4 PASS (Case 2): Password changed in auth.users -> complete_password_change SUCCEEDED, flag cleared, fingerprint cleared to NULL
+psql:C:/Users/omar/.gemini/antigravity/brain/2668add9-6e6f-4ea3-a4bd-0236d3d761c7/scratch/test_scope_40_2_proof.sql:175: NOTICE:  Test 5 PASS (Case 3): Missing fingerprint was REJECTED (Fail-closed) with: "بصمة كلمة المرور مفقودة؛ يرجى مراجعة الإدارة"
+psql:C:/Users/omar/.gemini/antigravity/brain/2668add9-6e6f-4ea3-a4bd-0236d3d761c7/scratch/test_scope_40_2_proof.sql:175: NOTICE:  Cleanup complete: Test user removed from auth.users and public.users
+psql:C:/Users/omar/.gemini/antigravity/brain/2668add9-6e6f-4ea3-a4bd-0236d3d761c7/scratch/test_scope_40_2_proof.sql:175: NOTICE:  ================================================================
+psql:C:/Users/omar/.gemini/antigravity/brain/2668add9-6e6f-4ea3-a4bd-0236d3d761c7/scratch/test_scope_40_2_proof.sql:175: NOTICE:  ALL 5 SERVER-SIDE HARDENING TESTS PASSED WITH 100% ACCURACY
+psql:C:/Users/omar/.gemini/antigravity/brain/2668add9-6e6f-4ea3-a4bd-0236d3d761c7/scratch/test_scope_40_2_proof.sql:175: NOTICE:  ================================================================
+DO
+--- 4. Final Clean State Verification ---
+ orphan_trainees 
+-----------------
+               0
+(1 row)
+
+ id | email | role | is_active | must_change_password | password_fingerprint 
+----+-------+------+-----------+----------------------+----------------------
+(0 rows)
+
+ROLLBACK

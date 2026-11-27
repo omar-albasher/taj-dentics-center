@@ -8,15 +8,6 @@ const corsHeaders = {
 const BAN_FOREVER = '876000h' // ~100 years: blocks login and token refresh until unbanned
 const STAFF_ROLES = ['admin', 'reception']
 const MIN_PASSWORD_LENGTH = 8
-// هامش على ساعة GoTrue نفسها: يجعل العلامة أحدث دائماً من auth.users.updated_at
-// الناتج عن تغيير كلمة المرور الإداري، فلا يمكن إسقاطها دون تغيير فعلي لاحق.
-const FLAG_MARGIN_MS = 2000
-
-const flaggedTimestamp = (authUpdatedAt?: string | null) => {
-  const base = authUpdatedAt ? Date.parse(authUpdatedAt) : NaN
-  const ts = Number.isFinite(base) ? base : Date.now()
-  return new Date(ts + FLAG_MARGIN_MS).toISOString()
-}
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -162,40 +153,20 @@ Deno.serve(async (req) => {
         return json({ error: 'يمكن للاستقبال إعادة تعيين كلمات مرور المتدربين فقط' }, 403)
       }
 
-      const { data: updated, error: passwordError } =
+      const { error: passwordError } =
         await supabaseAdmin.auth.admin.updateUserById(user_id, { password: new_password })
 
       if (passwordError) {
         return json({ error: passwordError.message || 'تعذر تحديث كلمة المرور' }, 400)
       }
 
-      let authUpdatedAt = updated?.user?.updated_at
-      if (!authUpdatedAt) {
-        const { data: fetched } = await supabaseAdmin.auth.admin.getUserById(user_id)
-        authUpdatedAt = fetched?.user?.updated_at
-      }
-
-      // العلامة بعد ساعة GoTrue + هامش، فلا تُقبل إلا بعد تغيير فعلي لاحق
-      const flagPayload = {
-        must_change_password: true,
-        must_change_password_at: flaggedTimestamp(authUpdatedAt),
-      }
-
-      let flagError = (await supabaseAdmin
-        .from('users')
-        .update(flagPayload)
-        .eq('id', user_id)).error
+      // ضبط علامة الإجبار وحساب بصمة كلمة المرور خادمياً عبر دالة RPC
+      const { error: flagError } = await supabaseAdmin.rpc('set_user_must_change_password', {
+        p_user_id: user_id,
+      })
 
       if (flagError) {
-        // محاولة واحدة إضافية قبل إعلان الفشل
-        flagError = (await supabaseAdmin
-          .from('users')
-          .update(flagPayload)
-          .eq('id', user_id)).error
-      }
-
-      if (flagError) {
-        console.error('reset_password flag update failed:', flagError.message)
+        console.error('reset_password flag RPC failed:', flagError.message)
         return json({
           error: 'تم تغيير كلمة المرور لكن تعذر تفعيل الإجبار على تغييرها؛ أعد المحاولة',
         }, 500)
