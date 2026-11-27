@@ -1,0 +1,65 @@
+--- Identity ---
+    db    |   usr    |                  addr                  |              ts               
+----------+----------+----------------------------------------+-------------------------------
+ postgres | postgres | 2a05:d014:128e:9501:250b:1c22:5ff5:88b | 2026-11-27 18:54:04.907922+00
+(1 row)
+
+BEGIN
+CREATE TABLE
+INSERT 0 2
+DELETE 0
+DELETE 0
+--- Precondition: fingerprint CHECK exists; drop it in-txn to emulate pre-#40.2 ---
+psql:d:/flutter-projects/admin_dashboard/supabase/baseline/staged_40_2_positive_probe.sql:51: NOTICE:  Precondition PASS: fingerprint CHECK present
+DO
+ALTER TABLE
+--- Setup: PA1 auth + flagged row (no fingerprint) ---
+INSERT 0 1
+INSERT 0 1
+--- PA1: backfill derives sha256(encrypted_password) ---
+psql:d:/flutter-projects/admin_dashboard/supabase/baseline/staged_40_2_positive_probe.sql:100: NOTICE:  PA1 PASS: backfill stored sha256 fingerprint (31e3411d008b29fa68ff636be580573332e73849693b65c99889d518597d9328)
+DO
+--- Setup: PA2 flagged row (auth row present, but backfill NOT run on it) ---
+INSERT 0 1
+INSERT 0 1
+--- PA2: fail-closed gate aborts on a flagged row without fingerprint ---
+CREATE FUNCTION
+psql:d:/flutter-projects/admin_dashboard/supabase/baseline/staged_40_2_positive_probe.sql:155: NOTICE:  PA2 PASS: gate aborted (Phase 40.2 fail-closed: 1 صف/صفوف معلّمة بـmust_change_password بلا بصمة قابلة للاشتقاق من auth.users؛ عالجها يدوياً قبل الترحيل)
+DO
+--- Cleanup (inside txn; claims cleared for the c1 guard) ---
+ set_config 
+------------
+ 
+(1 row)
+
+DELETE 3
+DELETE 2
+DELETE 2
+ residue_public_users 
+----------------------
+                    0
+(1 row)
+
+ residue_auth_users 
+--------------------
+                  0
+(1 row)
+
+ROLLBACK
+--- Post-rollback state (fresh transaction) ---
+ residue_public_users 
+----------------------
+                    0
+(1 row)
+
+ residue_auth_users 
+--------------------
+                  0
+(1 row)
+
+ fingerprint_constraint_present 
+--------------------------------
+                              1
+(1 row)
+
+PROBE_EXIT_CODE=0 
