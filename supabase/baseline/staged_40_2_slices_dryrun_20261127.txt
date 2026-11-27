@@ -1,0 +1,33 @@
+=== STEP 1: staged_40_2_step1_schema_and_functions.sql === 
+BEGIN
+DO
+psql:d:/flutter-projects/admin_dashboard/supabase/baseline/staged_40_2_step1_schema_and_functions.sql:48: NOTICE:  column "password_fingerprint" of relation "users" already exists, skipping
+ALTER TABLE
+UPDATE 0
+psql:d:/flutter-projects/admin_dashboard/supabase/baseline/staged_40_2_step1_schema_and_functions.sql:87: NOTICE:  #40.2 step1: flagged=0, with_fp=0, without_fp=0, unbackfillable=0
+DO
+CREATE FUNCTION
+REVOKE
+GRANT
+CREATE FUNCTION
+CREATE FUNCTION
+REVOKE
+REVOKE
+GRANT
+GRANT
+psql:d:/flutter-projects/admin_dashboard/supabase/baseline/staged_40_2_step1_schema_and_functions.sql:237: NOTICE:  #40.2 step1: fingerprint CHECK already present — step 2 already applied?
+DO
+COMMIT
+STEP1_EXIT_CODE=0 
+ 
+=== STEP 2: staged_40_2_step2_enforce_checks.sql === 
+BEGIN
+DO
+UPDATE 0
+DO
+DO
+DO
+psql:d:/flutter-projects/admin_dashboard/supabase/baseline/staged_40_2_step2_enforce_checks.sql:135: NOTICE:  #40.2 step2 PASS: fingerprint CHECK enforced; zero flagged rows without fingerprint
+DO
+COMMIT
+STEP2_EXIT_CODE=0 
