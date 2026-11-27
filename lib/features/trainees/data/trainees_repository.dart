@@ -2,11 +2,16 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../../core/utils/edge_function_invoke.dart';
 import '../domain/referral_models.dart';
 import '../domain/trainee_model.dart';
 
 class TraineesRepository {
-  final _client = Supabase.instance.client;
+  TraineesRepository({EdgeFunctionInvoke? invoke})
+      : _invoke = invoke ?? defaultEdgeFunctionInvoke;
+
+  final EdgeFunctionInvoke _invoke;
+  late final _client = Supabase.instance.client;
 
   Future<List<TraineeModel>> getTrainees({String? search}) async {
     var query = _client.from('trainees').select('''
@@ -176,6 +181,26 @@ users!trainees_user_id_fkey(
       }
     } catch (e) {
       debugPrint('Error saving extra trainee details: $e');
+    }
+  }
+
+  /// يمرَّر `users.id` (أي `TraineeModel.userId`) لا `trainees.id`.
+  Future<void> resetTraineePassword(String userId, String newPassword) async {
+    try {
+      final data = await _invoke('manage-user', {
+        'action': 'reset_password',
+        'user_id': userId,
+        'new_password': newPassword,
+      });
+      if (data is Map && data['error'] != null) {
+        throw Exception(data['error']);
+      }
+    } on FunctionException catch (e) {
+      final details = e.details;
+      if (details is Map && details['error'] != null) {
+        throw Exception(details['error']);
+      }
+      rethrow;
     }
   }
 

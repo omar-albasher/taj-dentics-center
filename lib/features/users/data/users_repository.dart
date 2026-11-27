@@ -1,8 +1,13 @@
 ﻿import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../../../core/utils/edge_function_invoke.dart';
 
 class UsersRepository {
-  final _client = Supabase.instance.client;
+  UsersRepository({EdgeFunctionInvoke? invoke})
+      : _invoke = invoke ?? defaultEdgeFunctionInvoke;
+
+  final EdgeFunctionInvoke _invoke;
+  late final _client = Supabase.instance.client;
 
   Future<List<Map<String, dynamic>>> getUsers() async {
     final response = await _client.from('users').select().inFilter(
@@ -26,12 +31,19 @@ class UsersRepository {
     });
   }
 
-  // Role/activation changes must go through the Edge Function: it also bans or
-  // unbans the auth account, which a direct table update cannot do.
+  Future<void> resetUserPassword(String userId, String newPassword) async {
+    await _invokeManageUser({
+      'action': 'reset_password',
+      'user_id': userId,
+      'new_password': newPassword,
+    });
+  }
+
+  // Role/activation/password changes must go through the Edge Function: it also
+  // bans or unbans the auth account and flags the forced password change.
   Future<void> _invokeManageUser(Map<String, dynamic> body) async {
     try {
-      final response = await _client.functions.invoke('manage-user', body: body);
-      final data = response.data;
+      final data = await _invoke('manage-user', body);
       if (data is Map && data['error'] != null) {
         throw Exception(data['error']);
       }

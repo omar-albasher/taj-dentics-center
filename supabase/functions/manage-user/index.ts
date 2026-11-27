@@ -6,7 +6,17 @@ const corsHeaders = {
 }
 
 const BAN_FOREVER = '876000h' // ~100 years: blocks login and token refresh until unbanned
-const MANAGED_ROLES = ['admin', 'reception']
+const STAFF_ROLES = ['admin', 'reception']
+const MIN_PASSWORD_LENGTH = 8
+// هامش على ساعة GoTrue نفسها: يجعل العلامة أحدث دائماً من auth.users.updated_at
+// الناتج عن تغيير كلمة المرور الإداري، فلا يمكن إسقاطها دون تغيير فعلي لاحق.
+const FLAG_MARGIN_MS = 2000
+
+const flaggedTimestamp = (authUpdatedAt?: string | null) => {
+  const base = authUpdatedAt ? Date.parse(authUpdatedAt) : NaN
+  const ts = Number.isFinite(base) ? base : Date.now()
+  return new Date(ts + FLAG_MARGIN_MS).toISOString()
+}
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -33,18 +43,18 @@ Deno.serve(async (req) => {
     const { data: { user }, error: authError } = await supabaseAuth.auth.getUser()
     if (authError || !user) return json({ error: 'Unauthorized' }, 401)
 
-    // فقط مدير نشط يستطيع إدارة الحسابات الإدارية
+    // الاستقبال مطلوب لإعادة تعيين كلمات مرور المتدربين؛ بقية الإجراءات مدير فقط
     const { data: caller } = await supabaseAdmin
       .from('users')
       .select('role, is_active')
       .eq('id', user.id)
       .single()
 
-    if (!caller || caller.role !== 'admin' || caller.is_active !== true) {
+    if (!caller || !STAFF_ROLES.includes(caller.role) || caller.is_active !== true) {
       return json({ error: 'صلاحيات غير كافية أو الحساب معطل' }, 403)
     }
 
-    const { action, user_id, role, is_active } = await req.json()
+    const { action, user_id, role, is_active, new_password } = await req.json()
     if (!action || !user_id) return json({ error: 'الحقول الإلزامية ناقصة' }, 400)
 
     // نفس منع الحارس في القاعدة، مع رسالة أوضح لمسار الواجهة
@@ -59,12 +69,15 @@ Deno.serve(async (req) => {
       .maybeSingle()
 
     if (!target) return json({ error: 'المستخدم غير موجود' }, 404)
-    if (!MANAGED_ROLES.includes(target.role)) {
-      return json({ error: 'هذه الشاشة مخصصة لحسابات الإدارة والاستقبال فقط' }, 400)
-    }
 
     if (action === 'set_role') {
-      if (!MANAGED_ROLES.includes(role)) return json({ error: 'الدور غير صالح' }, 400)
+      if (caller.role !== 'admin') {
+        return json({ error: 'فقط المدير يمكنه تغيير الأدوار' }, 403)
+      }
+      if (!STAFF_ROLES.includes(target.role)) {
+        return json({ error: 'هذه الشاشة مخصصة لحسابات الإدارة والاستقبال فقط' }, 400)
+      }
+      if (!STAFF_ROLES.includes(role)) return json({ error: 'الدور غير صالح' }, 400)
       if (role === target.role) return json({ success: true })
 
       // الحارس في القاعدة يمنع تحويل آخر مدير نشط ويرجع رسالة عربية (P0001)
@@ -78,6 +91,12 @@ Deno.serve(async (req) => {
     }
 
     if (action === 'set_active') {
+      if (caller.role !== 'admin') {
+        return json({ error: 'فقط المدير يمكنه تعطيل أو تفعيل الحسابات' }, 403)
+      }
+      if (!STAFF_ROLES.includes(target.role)) {
+        return json({ error: 'هذه الشاشة مخصصة لحسابات الإدارة والاستقبال فقط' }, 400)
+      }
       if (typeof is_active !== 'boolean') {
         return json({ error: 'قيمة التفعيل غير صالحة' }, 400)
       }
@@ -129,6 +148,77 @@ Deno.serve(async (req) => {
       }
 
       return json({ success: true, user_id, is_active: true }, 200)
+    }
+
+    if (action === 'reset_password') {
+      if (typeof new_password !== 'string' || new_password.length < MIN_PASSWORD_LENGTH) {
+        return json({ error: 'كلمة المرور يجب أن لا تقل عن 8 أحرف' }, 400)
+      }
+      if (target.is_active !== true) {
+        return json({ error: 'لا يمكن إعادة تعيين كلمة مرور حساب غير نشط' }, 400)
+      }
+      // الاستقبال يخدم المتدربين فقط ولا يمس أي حساب إداري
+      if (caller.role !== 'admin' && target.role !== 'trainee') {
+        return json({ error: 'يمكن للاستقبال إعادة تعيين كلمات مرور المتدربين فقط' }, 403)
+      }
+
+      const { data: updated, error: passwordError } =
+        await supabaseAdmin.auth.admin.updateUserById(user_id, { password: new_password })
+
+      if (passwordError) {
+        return json({ error: passwordError.message || 'تعذر تحديث كلمة المرور' }, 400)
+      }
+
+      let authUpdatedAt = updated?.user?.updated_at
+      if (!authUpdatedAt) {
+        const { data: fetched } = await supabaseAdmin.auth.admin.getUserById(user_id)
+        authUpdatedAt = fetched?.user?.updated_at
+      }
+
+      // العلامة بعد ساعة GoTrue + هامش، فلا تُقبل إلا بعد تغيير فعلي لاحق
+      const flagPayload = {
+        must_change_password: true,
+        must_change_password_at: flaggedTimestamp(authUpdatedAt),
+      }
+
+      let flagError = (await supabaseAdmin
+        .from('users')
+        .update(flagPayload)
+        .eq('id', user_id)).error
+
+      if (flagError) {
+        // محاولة واحدة إضافية قبل إعلان الفشل
+        flagError = (await supabaseAdmin
+          .from('users')
+          .update(flagPayload)
+          .eq('id', user_id)).error
+      }
+
+      if (flagError) {
+        console.error('reset_password flag update failed:', flagError.message)
+        return json({
+          error: 'تم تغيير كلمة المرور لكن تعذر تفعيل الإجبار على تغييرها؛ أعد المحاولة',
+        }, 500)
+      }
+
+      const { error: auditError } = await supabaseAdmin.from('audit_log').insert({
+        table_name: 'users',
+        operation: 'RESET_PASSWORD',
+        record_id: user_id,
+        new_data: { role: target.role, must_change_password: true },
+        performed_by: user.id,
+        actor_source: 'edge_function',
+        actor_role: caller.role,
+      })
+
+      if (auditError) {
+        console.error('reset_password audit insert failed:', auditError.message)
+        return json({
+          error: 'تمت إعادة التعيين لكن تعذر تسجيلها في التدقيق؛ أعد المحاولة',
+        }, 500)
+      }
+
+      return json({ success: true, user_id, must_change_password: true }, 200)
     }
 
     return json({ error: 'إجراء غير معروف' }, 400)

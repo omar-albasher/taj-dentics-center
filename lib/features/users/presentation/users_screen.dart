@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/utils/app_formatters.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/utils/responsive.dart';
+import '../../../core/widgets/reset_password_dialog.dart';
 import '../data/users_repository.dart';
 
 class UsersScreen extends ConsumerWidget {
@@ -84,6 +85,9 @@ class UsersScreen extends ConsumerWidget {
                               .updateUserRole(u['id'], role);
                           ref.invalidate(usersProvider);
                         },
+                        onResetPassword: (password) => ref
+                            .read(usersRepositoryProvider)
+                            .resetUserPassword(u['id'], password),
                       );
                     },
                   );
@@ -110,11 +114,13 @@ class _UserCard extends StatefulWidget {
   final Map<String, dynamic> user;
   final Function(bool) onToggle;
   final Function(String) onRoleChange;
+  final Future<void> Function(String) onResetPassword;
 
   const _UserCard({
     required this.user,
     required this.onToggle,
     required this.onRoleChange,
+    required this.onResetPassword,
   });
 
   @override
@@ -140,6 +146,17 @@ class _UserCardState extends State<_UserCard> {
         setState(() => _isLoading = false);
       }
     }
+  }
+
+  void _openResetDialog() {
+    showDialog(
+      context: context,
+      builder: (_) => ResetPasswordDialog(
+        targetName: widget.user['full_name'] as String? ?? '',
+        whatsappNumber: widget.user['phone'] as String?,
+        onSubmit: widget.onResetPassword,
+      ),
+    );
   }
 
   @override
@@ -226,6 +243,15 @@ class _UserCardState extends State<_UserCard> {
                   ),
                 )
               else ...[
+                if (isActive)
+                  IconButton(
+                    tooltip: 'إعادة تعيين كلمة المرور',
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
+                    icon: const Icon(Icons.lock_reset,
+                        color: AppColors.gold, size: 20),
+                    onPressed: _openResetDialog,
+                  ),
                 // Role Dropdown
                 DropdownButton<String>(
                   value: role,

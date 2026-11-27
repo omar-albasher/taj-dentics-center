@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../core/utils/app_formatters.dart';
 import 'package:admin_dashboard/core/widgets/app_error_widget.dart';
+import '../../../core/widgets/reset_password_dialog.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/utils/app_error_handler.dart';
 import '../../../core/utils/jwt_utils.dart';
@@ -134,6 +135,22 @@ class TraineeProfileScreen extends ConsumerWidget {
             tooltip: 'تعديل البيانات',
             icon: const Icon(Icons.edit_outlined, color: AppColors.gold),
             onPressed: () => _showEditDialog(context, trainee),
+          ),
+          IconButton(
+            tooltip: 'إعادة تعيين كلمة المرور',
+            icon: const Icon(Icons.lock_reset, color: AppColors.gold),
+            onPressed: () {
+              showDialog(
+                context: context,
+                builder: (_) => ResetPasswordDialog(
+                  targetName: traineeName,
+                  whatsappNumber: trainee.whatsappNumber,
+                  onSubmit: (password) => ref
+                      .read(traineesRepositoryProvider)
+                      .resetTraineePassword(trainee.userId, password),
+                ),
+              );
+            },
           ),
           ElevatedButton.icon(
             onPressed: () {

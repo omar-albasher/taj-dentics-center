@@ -6,6 +6,14 @@ const corsHeaders = {
 }
 
 const ALLOWED_ROLES = ['trainee', 'reception', 'admin']
+// العلامة تُشتق من ساعة GoTrue نفسها + هامش، فلا يمكن إسقاطها دون تغيير فعلي لاحق
+const FLAG_MARGIN_MS = 2000
+
+const flaggedTimestamp = (authUpdatedAt?: string | null) => {
+  const base = authUpdatedAt ? Date.parse(authUpdatedAt) : NaN
+  const ts = Number.isFinite(base) ? base : Date.now()
+  return new Date(ts + FLAG_MARGIN_MS).toISOString()
+}
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -89,7 +97,8 @@ Deno.serve(async (req) => {
       role: requestedRole,
       is_active: true,
       must_change_password: requestedRole === 'trainee',
-      must_change_password_at: requestedRole === 'trainee' ? new Date().toISOString() : null
+      must_change_password_at:
+        requestedRole === 'trainee' ? flaggedTimestamp(newUser.user.updated_at) : null
     })
 
     if (userInsertError) {
